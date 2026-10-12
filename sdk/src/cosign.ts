@@ -2,6 +2,7 @@
 // the unsigned CBOR travels to each party, each returns a witness set, and
 // anyone assembles and submits. Every party should `describeTx` first.
 import { CML, Data, type LucidEvolution, type TxSignBuilder } from "@lucid-evolution/lucid";
+import { fmt, multiAssetToAssets, valueToAssets } from "./assets.js";
 import { INTENT_LABEL, verifyIntent, type Intent } from "./intent.js";
 import type { Vault } from "./vault.js";
 
@@ -24,8 +25,19 @@ export type TxSummary = {
   requiredSigners: string[];
   validity: { fromSlot?: string; ttlSlot?: string };
   mint: Record<string, string>;
+  /** Redeemers proven to run the vault's own script, by name. */
   vaultRedeemers: string[];
+  /** Every other redeemer: another script, or a spent input whose address wasn't supplied. */
+  otherRedeemers: string[];
   intent?: Intent;
+};
+
+export type DescribeOptions = {
+  /** The vault whose redeemers get named. Without it, no redeemer is attributed to the vault. */
+  vault?: Pick<Vault, "hash">;
+  /** bech32 address of each spent input, keyed `txHash#index`. A spend redeemer is the vault's
+   *  only when its input is known to sit at the vault's script credential. */
+  inputAddresses?: Record<string, string>;
 };
 
 const REDEEMER_NAMES: Record<string, string[]> = {
@@ -33,64 +45,74 @@ const REDEEMER_NAMES: Record<string, string[]> = {
   mint: ["InitConfig", "ManageAllowances"],
 };
 
+const scriptCredOf = (bech32: string) => CML.Address.from_bech32(bech32).payment_cred()?.as_script()?.to_hex();
+
 /** Human/machine-readable view of what a signer is about to approve. */
-export function describeTx(txCbor: string, _vault?: Vault): TxSummary {
+export function describeTx(txCbor: string, opts: DescribeOptions = {}): TxSummary {
   const tx = CML.Transaction.from_cbor_hex(txCbor);
   const body = tx.body();
-  const inputs = [];
+  const refs: { txHash: string; index: bigint }[] = [];
   for (let i = 0; i < body.inputs().len(); i++) {
     const x = body.inputs().get(i);
-    inputs.push(`${x.transaction_id().to_hex()}#${x.index()}`);
+    refs.push({ txHash: x.transaction_id().to_hex(), index: x.index() });
   }
+  const inputs = refs.map((r) => `${r.txHash}#${r.index}`);
   const outputs = [];
   for (let i = 0; i < body.outputs().len(); i++) {
     const o = body.outputs().get(i);
-    const assets: Record<string, string> = { lovelace: o.amount().coin().toString() };
-    const ma = o.amount().multi_asset();
-    const pols = ma.keys();
-    for (let p = 0; p < pols.len(); p++) {
-      const pol = pols.get(p);
-      const names = ma.get_assets(pol)!;
-      const ks = names.keys();
-      for (let n = 0; n < ks.len(); n++) assets[pol.to_hex() + ks.get(n).to_cbor_hex().slice(2)] = names.get(ks.get(n))!.toString();
-    }
-    outputs.push({ address: o.address().to_bech32(), assets, inlineDatum: !!o.datum()?.as_datum() });
+    outputs.push({ address: o.address().to_bech32(), assets: fmt(valueToAssets(o.amount())), inlineDatum: !!o.datum()?.as_datum() });
   }
   const req: string[] = [];
   const rs = body.required_signers();
   for (let i = 0; rs && i < rs.len(); i++) req.push(rs.get(i).to_hex());
-  const mint: Record<string, string> = {};
-  const m = body.mint();
-  if (m) {
-    const pols = m.keys();
-    for (let p = 0; p < pols.len(); p++) {
-      const pol = pols.get(p);
-      const names = m.get_assets(pol)!;
-      const ks = names.keys();
-      for (let n = 0; n < ks.len(); n++) mint[pol.to_hex() + ks.get(n).to_cbor_hex().slice(2)] = names.get(ks.get(n))!.toString();
-    }
-  }
-  const vaultRedeemers: string[] = [];
-  const reds = tx.witness_set().redeemers()?.as_map_redeemer_key_to_redeemer_val();
-  const legacy = tx.witness_set().redeemers()?.as_arr_legacy_redeemer();
-  const push = (tag: number, data: string) => {
-    const c = Data.from(data) as { index: number };
-    const kind = tag === 0 ? "spend" : tag === 1 ? "mint" : "other";
-    vaultRedeemers.push(`${kind}:${REDEEMER_NAMES[kind]?.[c.index] ?? c.index}`);
-  };
-  if (reds) {
-    const ks = reds.keys();
-    for (let i = 0; i < ks.len(); i++) push(ks.get(i).tag(), reds.get(ks.get(i))!.data().to_cbor_hex());
-  }
-  if (legacy) for (let i = 0; i < legacy.len(); i++) push(legacy.get(i).tag(), legacy.get(i).data().to_cbor_hex());
+  const mint = fmt(multiAssetToAssets(body.mint()));
 
+  // Redeemer indices follow the ledger's sorted order: inputs by (tx id, index), mint by policy id.
+  const sortedInputs = [...refs]
+    .sort((a, b) => (a.txHash < b.txHash ? -1 : a.txHash > b.txHash ? 1 : a.index < b.index ? -1 : a.index > b.index ? 1 : 0))
+    .map((r) => `${r.txHash}#${r.index}`);
+  const sortedPolicies: string[] = [];
+  const mp = body.mint()?.keys();
+  for (let i = 0; mp && i < mp.len(); i++) sortedPolicies.push(mp.get(i).to_hex());
+  sortedPolicies.sort();
+
+  const vaultRedeemers: string[] = [];
+  const otherRedeemers: string[] = [];
+  let intentField: string | undefined;
+  const push = (tag: number, index: number, data: string) => {
+    const kind = tag === 0 ? "spend" : tag === 1 ? "mint" : `tag${tag}`;
+    const target = kind === "spend" ? sortedInputs[index] : kind === "mint" ? sortedPolicies[index] : String(index);
+    const isVault =
+      !!opts.vault &&
+      target !== undefined &&
+      (kind === "mint"
+        ? target === opts.vault.hash
+        : kind === "spend" && opts.inputAddresses?.[target] !== undefined && scriptCredOf(opts.inputAddresses[target]!) === opts.vault.hash);
+    if (!isVault) {
+      otherRedeemers.push(`${kind}:${target ?? index}`);
+      return;
+    }
+    const c = Data.from(data) as { index: number; fields: unknown[] };
+    vaultRedeemers.push(`${kind}:${REDEEMER_NAMES[kind]?.[c.index] ?? c.index}`);
+    if (kind === "spend" && (c.index === 0 || c.index === 1) && typeof c.fields?.[0] === "string" && c.fields[0].length === 64)
+      intentField = c.fields[0];
+  };
+  const reds = tx.witness_set().redeemers();
+  const map = reds?.as_map_redeemer_key_to_redeemer_val();
+  if (map) {
+    const ks = map.keys();
+    for (let i = 0; i < ks.len(); i++) push(ks.get(i).tag(), Number(ks.get(i).index()), map.get(ks.get(i))!.data().to_cbor_hex());
+  }
+  const legacy = reds?.as_arr_legacy_redeemer();
+  for (let i = 0; legacy && i < legacy.len(); i++)
+    push(legacy.get(i).tag(), Number(legacy.get(i).index()), legacy.get(i).data().to_cbor_hex());
+
+  // The intent record is trusted only when it hashes to the vault's own spend redeemer.
   let intent: Intent | undefined;
   const meta = tx.auxiliary_data()?.metadata()?.get(BigInt(INTENT_LABEL));
-  if (meta) {
+  if (meta && intentField) {
     const json = JSON.parse(CML.decode_metadatum_to_json_str(meta, CML.MetadataJsonSchema.NoConversions));
-    const spendRedeemer = vaultRedeemers.find((r) => r.startsWith("spend:AgentSpend") || r.startsWith("spend:CoSignedSpend"));
-    const hash = redeemerIntentHash(tx);
-    if (spendRedeemer && hash) intent = verifyIntent(json, hash);
+    intent = verifyIntent(json, intentField);
   }
   return {
     hash: CML.hash_transaction(body).to_hex(),
@@ -101,23 +123,9 @@ export function describeTx(txCbor: string, _vault?: Vault): TxSummary {
     validity: { fromSlot: body.validity_interval_start()?.toString(), ttlSlot: body.ttl()?.toString() },
     mint,
     vaultRedeemers,
+    otherRedeemers,
     intent,
   };
-}
-
-function redeemerIntentHash(tx: CML.Transaction): string | undefined {
-  const datas: string[] = [];
-  const reds = tx.witness_set().redeemers();
-  const map = reds?.as_map_redeemer_key_to_redeemer_val();
-  if (map) for (let i = 0; i < map.keys().len(); i++) datas.push(map.get(map.keys().get(i))!.data().to_cbor_hex());
-  const arr = reds?.as_arr_legacy_redeemer();
-  if (arr) for (let i = 0; i < arr.len(); i++) datas.push(arr.get(i).data().to_cbor_hex());
-  for (const d of datas) {
-    const c = Data.from(d) as { index: number; fields: unknown[] };
-    if ((c.index === 0 || c.index === 1) && typeof c.fields?.[0] === "string" && c.fields[0].length === 64)
-      return c.fields[0];
-  }
-  return undefined;
 }
 
 export type { TxSignBuilder };

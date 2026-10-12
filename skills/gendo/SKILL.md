@@ -1,11 +1,11 @@
 ---
-name: noether
-description: Set up and operate a noether vault on Cardano preprod, where a team of owners gives an AI agent a capped spending allowance. Use when creating a vault, granting or revoking an agent's allowance, wiring an agent to pay through the signer daemon, or interpreting a refused payment (TX_CAP, WINDOW_CAP, DESTINATION, PAUSED).
+name: gendo
+description: Set up and operate a gendo vault (budgeted on-chain accounts for AI agents) on Cardano preprod, where a team of owners gives an AI agent a capped spending allowance. Use when creating a vault, granting or revoking an agent's allowance, wiring an agent to pay through the signer daemon, or interpreting a refused payment (TX_CAP, WINDOW_CAP, DESTINATION, PAUSED).
 ---
 
-# noether
+# gendo
 
-noether is a Cardano vault for AI agents. Owners (m-of-n) hold a treasury and grant each agent an **allowance**:
+gendo gives AI agents budgeted on-chain accounts on Cardano. Owners (m-of-n) hold a treasury and grant each agent an **allowance**:
 - **per-payment and per-period caps** for each asset;
 - an **allowlist** of exact payee addresses;
 - an **expiry**.
@@ -48,7 +48,7 @@ cli/vault allowance grant --agent agent --dest <payee_addr>[,<payee_addr>...] \
   --fund 60 --from-treasury --propose owner_a --sign owner_a,owner_b
 cli/vault allowance list                      # note the allowance unit for the agent
 ```
-- `--cap lovelace:25:10` means at most 25 tADA per period and at most 10 tADA per payment. The fee counts toward both.
+- `--cap lovelace:25:10` means at most 25 tADA per period and at most 10 tADA per payment. The fee counts toward both. Each cap needs `0 < per-payment ≤ per-period`; to forbid an asset, leave it out.
 - The cap is a **turnover budget**: money that comes back never restores headroom.
 - `--dest` takes **exact full addresses**, stake part included.
 
@@ -57,7 +57,7 @@ cli/vault allowance list                      # note the allowance unit for the 
    ```bash
    cli/vault signer start --key agent --allowance <unit> --dest <payee_addr> --socket .vault/signer.sock
    ```
-   The daemon persists its rate limits, its daily budget and an intent-id dedupe table across restarts.
+   The daemon only signs spends from that one allowance. It keeps a daily budget per asset: lovelace from `--max-ada-per-day`, and each token from `--max-per-day <unit>:<qty>`. A token with no daily limit can't leave. Its rate limits, budgets and intent-id dedupe table persist across restarts.
 2. **Pay with an intent id** derived from the business object, such as the invoice number:
    ```bash
    cli/vault agent spend <unit> --to <payee_addr> --ada 4 --intent-id INV-1001 \

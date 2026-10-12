@@ -10,6 +10,7 @@
 import { appendFileSync, chmodSync, existsSync, readFileSync, unlinkSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { CML } from "@lucid-evolution/lucid";
+import { fmt } from "../assets.js";
 import { describeTx } from "../cosign.js";
 import { txFate, type ChainQuery, type Fate } from "../idempotency.js";
 import { checkIntent, factsOf } from "./dedupe.js";
@@ -42,6 +43,9 @@ export function startSigner(opts: SignerOptions): Promise<Server> {
   const sk = CML.PrivateKey.from_bech32(opts.privateKey);
   const pkh = sk.to_public().hash().to_hex();
   if (pkh !== opts.policy.agentKeyHash) throw new Error("private key does not match policy.agentKeyHash");
+  const vaultHash = CML.Address.from_bech32(opts.policy.vaultAddress).payment_cred()?.as_script()?.to_hex();
+  if (!vaultHash) throw new Error("policy.vaultAddress is not a script address");
+  const vault = { hash: vaultHash };
   const state = loadState(opts.statePath);
   const now = opts.now ?? Date.now;
   const audit = (entry: object) => {
@@ -91,7 +95,10 @@ export function startSigner(opts: SignerOptions): Promise<Server> {
     let intentId: string;
     try {
       facts = factsOf(txCbor, opts.policy.slot);
-      const intent = describeTx(txCbor).intent; // verified against the redeemer hash
+      // Attribute the single input to the vault so describeTx reads the vault's own redeemer.
+      // `evaluate` below refuses any tx where that input isn't the configured allowance.
+      const inputAddresses = facts.inputs.length === 1 ? { [`${facts.inputs[0]!.txHash}#${facts.inputs[0]!.index}`]: opts.policy.vaultAddress } : {};
+      const intent = describeTx(txCbor, { vault, inputAddresses }).intent; // verified against the redeemer hash
       if (!intent?.id) return refuse(facts.hash, "tx carries no verifiable intent record");
       intentId = intent.id;
     } catch (e) {
@@ -109,11 +116,11 @@ export function startSigner(opts: SignerOptions): Promise<Server> {
     if (!decision.ok) return refuse(facts.hash, decision.reason);
 
     if (!reSign) {
-      state.signed.push({ at: t, lovelace: decision.lovelaceOut });
+      state.signed.push({ at: t, assets: decision.out });
       state.intents[intentId] = { ...facts, at: t };
     }
     saveState(opts.statePath, state, t); // persisted BEFORE the witness leaves
-    audit({ txHash: facts.hash, intentId, decision: reSign ? "re-signed" : "signed", lovelaceOut: decision.lovelaceOut.toString() });
+    audit({ txHash: facts.hash, intentId, decision: reSign ? "re-signed" : "signed", out: fmt(decision.out) });
     return { status: 200, body: { witness: witnessFor(txCbor, opts.privateKey) } };
   }
 

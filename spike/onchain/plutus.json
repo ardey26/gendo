@@ -1,6 +1,6 @@
 {
   "preamble": {
-    "title": "noether/spike",
+    "title": "gendo/spike",
     "description": "M0 spike: single-input script spend, explicit collateral, multi-party witnesses",
     "version": "0.0.0",
     "plutusVersion": "v3",

@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#161826">
-<title>noether</title>
-<meta name="description" content="Multisig for AI agents. Owners approve, agents spend inside an allowance, enforced on-chain on Cardano.">
+<title>gendo</title>
+<meta name="description" content="Budgeted on-chain accounts for AI agents. Owners approve, agents pay inside an allowance, enforced on-chain on Cardano.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M15 3 A13 13 0 0 0 15 29 Z' fill='%239184d9'/%3E%3Cpath d='M17 4.6 A11.4 11.4 0 0 1 17 27.4' fill='none' stroke='%23e9e9ed' stroke-width='3.5'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -41,7 +41,7 @@
   .gh i { font-size: 18px; }
 
   .hero { padding: 88px 0 56px; display: flex; flex-direction: column; gap: 20px; }
-  h1 { font-size: 84px; line-height: 1; letter-spacing: -.04em; }
+  h1 { font-size: 84px; line-height: 1; letter-spacing: -.04em; text-wrap: balance; }
   .lede { font-size: 22px; color: var(--n400); margin: 0; }
   .install { display: flex; align-self: flex-start; align-items: center; gap: 14px; max-width: 100%; background: var(--surface); box-shadow: var(--edge); border-radius: var(--r-md); padding: 8px 8px 8px 16px; font: 500 15px "Inter", system-ui, sans-serif; margin-top: 12px; }
   .install code { font: inherit; overflow-x: auto; white-space: nowrap; }
@@ -160,15 +160,15 @@
 <body>
 <div class="page">
   <header>
-    <a class="brand" href="#"><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><path d="M15 3 A13 13 0 0 0 15 29 Z" fill="#9184d9"/><path d="M17 4.6 A11.4 11.4 0 0 1 17 27.4" fill="none" stroke="#e9e9ed" stroke-width="3.5"/></svg>noether</a>
-    <a class="gh" href="https://github.com/ardey26/noether"><i class="ph ph-github-logo" aria-hidden="true"></i>GitHub</a>
+    <a class="brand" href="#"><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><path d="M15 3 A13 13 0 0 0 15 29 Z" fill="#9184d9"/><path d="M17 4.6 A11.4 11.4 0 0 1 17 27.4" fill="none" stroke="#e9e9ed" stroke-width="3.5"/></svg>gendo</a>
+    <a class="gh" href="https://github.com/ardey26/gendo"><i class="ph ph-github-logo" aria-hidden="true"></i>GitHub</a>
   </header>
 
   <main>
     <div class="hero">
-      <h1>Multisig for AI agents.</h1>
+      <h1>Budgeted <span style="white-space:nowrap">on-chain</span> accounts for AI agents.</h1>
       <p class="lede">Owners approve. Agents spend inside an allowance.</p>
-      <div class="install"><code>npx skills add ardey26/noether</code><button class="copy" type="button">Copy</button></div>
+      <div class="install"><code>npx skills add ardey26/gendo</code><button class="copy" type="button">Copy</button></div>
     </div>
 
     <figure class="flow" style="margin:0" aria-label="Two of three owners fund a 150 ADA multisig and grant an agent a 25 ADA allowance. The agent pays two approved payees. A 12 ADA payment over the cap is refused.">
@@ -228,13 +228,13 @@
   </main>
 
   <footer>
-    <a href="https://github.com/ardey26/noether">github.com/ardey26/noether</a>
+    <a href="https://github.com/ardey26/gendo">github.com/ardey26/gendo</a>
   </footer>
 </div>
 <script>
   const btn = document.querySelector(".copy");
   btn.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText("npx skills add ardey26/noether"); } catch {}
+    try { await navigator.clipboard.writeText("npx skills add ardey26/gendo"); } catch {}
     btn.textContent = "Copied";
     clearTimeout(btn.t);
     btn.t = setTimeout(() => { btn.textContent = "Copy"; }, 1600);

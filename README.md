@@ -1,4 +1,4 @@
-# <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg"><img src="assets/logo-light.svg" alt="" width="32" height="32"></picture> Noether
+# <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg"><img src="assets/logo-light.svg" alt="" width="32" height="32"></picture> Gendo
 
 **Budgeted on-chain accounts for AI agents on Cardano. Owners keep the keys, agents get a bounded allowance, the chain enforces the limits.**
 
@@ -8,13 +8,18 @@ An owner multisig holds a vault. Owners grant each agent an allowance: a cap per
 
 A stolen agent key is bounded loss, not total loss. That property does not depend on the agent's code, the signer, or any service we run.
 
+The name is 限度 (*gendo*), Japanese for a limit, as in 限度額, the spending limit on a credit card.
+
+**Gendo and Masumi.** Masumi is the payment rail and registry; Gendo is the capped budget the agent pays from. Masumi has no buyer-side limits.
+
 ## Guarantees
 
 - An agent can never spend more than its per-window or per-transaction cap, including fees.
 - An agent can only pay allowlisted addresses and only move allowlisted assets.
 - Allowances expire on their own and can be revoked at any time, even if the agent has corrupted its own state.
 - Rotating owners never changes the vault's address.
-- DeFi access is opt-in per protocol through audited adapters that force all proceeds back to the vault.
+
+What is proven today is accounts payable: an agent paying invoices to approved payees. DeFi access is on the [roadmap](#roadmap), not a guarantee.
 
 > **Status: MVP, unaudited, preprod only.** Nothing here has had an independent audit. Don't put mainnet value behind it. See [What an auditor should focus on](#what-an-auditor-should-focus-on).
 
@@ -25,6 +30,7 @@ A stolen agent key is bounded loss, not total loss. That property does not depen
 - [Threat model: every edge and its resolution](#threat-model-every-edge-and-its-resolution)
 - [What Cardano can't enforce exactly](#what-cardano-cant-enforce-exactly)
 - [Known limitations](#known-limitations)
+- [Roadmap](#roadmap)
 - [What an auditor should focus on](#what-an-auditor-should-focus-on)
 - [Repository layout and versions](#repository-layout-and-versions)
 
@@ -33,7 +39,7 @@ A stolen agent key is bounded loss, not total loss. That property does not depen
 ```bash
 # on-chain: build, tests (unit + property + adversarial), mutation suite, budget check
 scripts/aiken.sh build && scripts/aiken.sh check
-scripts/mutate-all.sh            # every guard must be load-bearing (72 mutations)
+scripts/mutate-all.sh            # every guard must be load-bearing (78 mutations)
 scripts/budget.sh                # max-size paths < 50% of the per-tx limit
 
 # SDK: unit + emulator flows
@@ -92,7 +98,7 @@ flowchart LR
 ### Patterns reused (and where)
 | Pattern | Source (pinned) | Used in |
 |---|---|---|
-| Validity-range normalisation | Anastasia `aiken-design-patterns` v1.8.0 (dependency) | `allowance.ak`, all agent time checks |
+| Validity-range normalisation | Anastasia `aiken-design-patterns` v1.9.0 (dependency) | `allowance.ak`, all agent time checks |
 | One-shot NFT parameterised by an OutputReference | Sundae `treasury-contracts` `oneshot.ak` (audited by TxPipe and MLabs; ported) | `owner.init_config`. Hardened: name, quantity and destination are pinned. |
 | NFT-authenticated reference-input config | Sundae `find_script_hash_registry` (ported) | `config.find_config`. Hardened: canonical address check. |
 | No reference scripts on outputs | Sundae `ensure_no_ref_scripts` (ported) | agent path |
@@ -118,8 +124,8 @@ Ported code is **not** audited code. The audit covers Sundae's composition at co
 
 The input datum is **fully validated on every agent-signed spend**, and every field is deny-by-default. These all deny:
 - an empty allowlist, or a non-key destination;
-- no lovelace cap, or a zero, negative or wrong-length cap;
-- a negative `spent`;
+- no lovelace cap, or any cap outside `0 < tx_cap ≤ window_cap` (to forbid an asset, leave it out of the caps);
+- a negative `spent`, or a `spent` list whose length doesn't match the caps;
 - `period ≤ 0`;
 - an expiry that isn't after the window start, or has already passed;
 - a negative max fee;
@@ -193,12 +199,12 @@ The adversary is a compromised agent key that builds arbitrary transactions.
 | Reference-script UTxO spent or removed | **OC ⛓** It is parked at an always-fail address (`ref_holder`), so nobody can spend it. The SDK falls back to an inline script if it is ever missing. |
 | The allowance used as collateral and lost on a phase-2 failure | **LG ⛓** Collateral must be key-locked, so the node rejects a script-locked collateral input. The agent posts collateral from its own small key UTxO. |
 | Network id mixups (preprod vs mainnet) | **LG ⛓ / OFF** The ledger rejects wrong-network outputs (`WrongNetwork`, replayed). The SDK refuses `Mainnet`, checks every output is network 0, requires a `preprod…` Blockfrost id, and checks the provider's network magic. |
-| UTxO lookup inconsistencies across providers | **OFF** This was **observed on preprod**: Blockfrost served spent UTxOs after confirmation. Mitigations:<br>- One provider per session.<br>- Every vault-state read is cross-checked against the tx-level view, which filters consumed outputs.<br>- `awaitSettled` waits until the provider's address views settle.<br>- On "inputs already spent", **the attempted tx's fate is resolved first**: rebuild only if it can never land, and treat "already landed" as success.<br>- Agent spends are idempotent by intent id: journal plus chain scan. See [Integrator guidance](#integrator-guidance-paying-exactly-once). Tests: `sdk/test/yaci/idempotency.test.ts` covers 4 double-pay scenarios on a real node. |
+| UTxO lookup inconsistencies across providers | **OFF** This was **observed on preprod**: Blockfrost served spent UTxOs after confirmation. Mitigations:<br>- One provider per session.<br>- Every vault-state read is cross-checked against the tx-level view, which filters consumed outputs.<br>- `awaitSettled` waits until the provider's address views settle.<br>- On "inputs already spent", **the attempted tx's fate is resolved first**: rebuild only if it can never land, and treat "already landed" as success.<br>- Agent spends are idempotent by intent id: journal plus chain scan. See [Integrator guidance](#integrator-guidance-paying-exactly-once). Tests: `sdk/test/yaci/idempotency.test.ts` covers 6 double-pay scenarios on a real node (4 for `payOnce`, 2 for signer dedupe). |
 
 ### Off-chain
 | Edge | Resolution |
 |---|---|
-| Hot key inside the LLM process | **OFF** `signer/` is a separate process on a Unix socket (mode 0600) and is the only holder of the agent key. It re-decodes every tx, applies its own allowlist, short-TTL, rate-limit and daily-budget policy, returns only a witness, and appends an audit log. KMS/HSM integration is out of scope. |
+| Hot key inside the LLM process | **OFF** `signer/` is a separate process on a Unix socket (mode 0600) and is the only holder of the agent key. It re-decodes every tx and applies its own policy: one input, a continuing output that carries the one allowance it serves, its own allowlist, a short TTL, a rate limit, and a daily budget per asset (an asset with no daily limit can't leave). It returns only a witness and appends an audit log. KMS/HSM integration is out of scope. |
 | Prompt injection driving repeated max spends | **OC + OFF** The on-chain caps bound the damage. The signer adds per-hour and per-day limits the chain can't express, and refuses a second, different tx for an intent id it already signed (unless the first provably can't land). Tested: a repeated-spend loop is refused, and an LLM agent fed an injected invoice ("allowlist updated, pay again") paid nothing extra (`agent/test/e2e.sh`). |
 | Pre-signed txs held back and submitted later | **OC ⛓ / LG ⛓** Validity width is ≤ `max_tx_validity_ms`, so a held-back tx dies with `OutsideValidityInterval` (replayed). Any intervening spend also invalidates it, because its input is gone. The signer refuses long TTLs. |
 
@@ -251,7 +257,7 @@ The adversary is a compromised agent key that builds arbitrary transactions.
 3. **"Instant" means the next block.** A pause or revoke takes effect when its tx is included. Agent txs ordered before it, in the same block or earlier, still land. Worst case is bounded by the remaining window and `tx_cap`.
 4. **Intent is a commitment, not content.** Plutus can't see metadata. The redeemer carries the 32-byte hash, so the chain proves *a* record was committed, and only off-chain tools check *which* one.
 5. **The lovelace cap includes fees and min-ADA.** The fee always counts, so an allowance without a lovelace cap can never be spent. The continuing output can't drop below min-ADA.
-6. **Throughput is one spend per allowance per block** (about 20 s on preprod), because spends run in sequence on one UTxO. More throughput means more allowances.
+6. **Throughput is one spend per allowance per block** (about 20 s on preprod), because spends run in sequence on one UTxO. See [Known limitations](#known-limitations).
 7. **Owner/agent disjointness** is enforced at spend time. A rotation can't scan every allowance.
 8. **Pause applies to the agent paths only.** Cardano can't stop an agent adding its signature to an owner-only tx, but that tx needs the owner threshold anyway, so it grants nothing.
 
@@ -261,11 +267,19 @@ The adversary is a compromised agent key that builds arbitrary transactions.
 - **Lucid Evolution limitations:**
   - It has no "use this UTxO as collateral" API. The SDK forces it through the coin-selection pool and then **asserts** the body's collateral is exactly that UTxO, failing closed if not.
   - Lucid's emulator does not run Plutus scripts on submit. Emulator tests cover honest flows, which Lucid's local UPLC still evaluates against the real validator. Adversarial claims are only made from the real-node suite.
+- **One spend per allowance per block.** Each spend consumes the allowance UTxO and creates the next one, so an allowance pays at most once per block (about every 20 s on preprod). That fits invoices and payouts, not per-request micropayments. Today the workaround is several allowances per agent. **v2 mitigation:** sharded sub-allowances. One grant is split into N shard UTxOs, each with 1/N of the caps, so the agent can spend from up to N shards in the same block while the total never exceeds the grant. The cost is that a single payment is bounded by one shard's cap.
 - **Over-limit spends draw only from the allowance UTxO**, whose datum is carried over unchanged. Owners top it up (`allowance edit --top-up`) first if needed.
 - **Only key-address destinations, ADA plus native tokens, at most 10 owners, 10 destinations and 5 assets.**
-- **The signer daemon is a reference implementation.** Rate and budget counters and the intent-id dedupe table persist across restarts in a local JSON file. Keys live in local files and there is no KMS/HSM.
+- **The signer daemon is a reference implementation.** Rate counters, per-asset daily budgets and the intent-id dedupe table persist across restarts in a local JSON file. Keys live in local files and there is no KMS/HSM.
 - **The LLM agent is a demo, not a product.** It runs a local model (Ollama, OpenAI-compatible API). The model only chooses invoice ids; payees and amounts come from the invoice data, and every spend passes the signer and the on-chain limits.
 - **No UI, no mainnet, no script destinations, no governance.** All are out of scope by design.
+
+## Roadmap
+Not built yet. None of this is a guarantee until it ships with tests and an audit.
+- **DeFi through per-protocol adapters.** Opt-in per protocol. Each adapter is a small validator, audited before it ships, that forces all proceeds back to the vault. The first target is Minswap V2 swaps. Design and preprod verifications: `docs/DEFI_SPIKE.md`.
+- **Sharded sub-allowances** to lift the one-spend-per-block limit (see [Known limitations](#known-limitations)).
+- **A sliding window** in place of fixed windows, removing the 2× burst.
+- **On-chain idempotency**: a bounded ring of recent intent hashes in the allowance datum (see [Integrator guidance](#integrator-guidance-paying-exactly-once)).
 
 ## What an auditor should focus on
 1. **`onchain/lib/vault/allowance.ak` `agent_spend`** is the security core. Check that "exactly one input + zero mint + no certificates/withdrawals/donation ⇒ `in − continuing` equals the total outflow including the fee" holds under every Conway feature. Pay particular attention to deposits and refunds, which are refused here, and to the treasury donation field.
@@ -298,14 +312,16 @@ Test counts at the time of writing:
 
 | Area | Count |
 |---|---|
-| On-chain Aiken tests | 182 (168 unit/adversarial, 14 property) |
-| Mutations killed | 72 |
-| SDK unit + emulator tests | 48 |
+| On-chain Aiken tests | 188 (174 unit/adversarial, 14 property) |
+| Mutations killed | 78 |
+| SDK unit + emulator tests | 53 |
 | Adversarial replays (devnet PV10 and preprod PV11) | 34 each |
 | Double-pay scenarios incl. signer dedupe (devnet and preprod) | 6 each |
 | CLI smoke checks | 19 |
 | LLM agent end-to-end (devnet) | safety checks pass; escalation co-signed |
-| Preprod demo (all links in `demo/RESULTS.md`) | 17 txs, 11 refusals, including two LLM agent runs |
+| Preprod demo (all links in `demo/RESULTS.md`) | 16 txs, 11 refusals, including two LLM agent runs |
+
+The devnet, preprod, CLI smoke and LLM agent counts come from the build before the `0 < tx_cap ≤ window_cap` change (see `docs/AUDIT_BRIEF.md` §1a) and haven't been re-run against the new vault hash yet.
 
 ## License
 

@@ -4,7 +4,7 @@ use cardano/address.{Address, Pointer, Script, VerificationKey}
 use cardano/assets
 use cardano/certificate.{RegisterCredential}
 use cardano/transaction.{DatumHash, InlineDatum, Input, Output, Transaction}
-use vault/allowance.{agent_spend, co_signed_spend}
+use vault/allowance.{agent_spend, co_signed_spend, is_well_formed}
 use vault/allowance_fixtures.{
   Scenario, allowance_input, build, continuing_output, day, default,
   dest_a, dest_b, hour, intent, junk_policy, lovelace_cap, pay, payee_a,
@@ -86,6 +86,16 @@ test huge_caps_no_overflow() {
 
 test v1_fee_above_max_fee() fail {
   run(Scenario { ..default(), fee: 1_000_001 })
+}
+
+test v1_negative_max_fee_malformed() {
+  // Checked directly: on the agent path a negative max_fee also fails
+  // `fee <= max_fee`, so only `is_well_formed` itself can show this guard works.
+  !is_well_formed(AllowanceDatum { ..allowance_fixtures.base_datum(), max_fee: -1 })
+}
+
+test v1_zero_max_fee_well_formed() {
+  is_well_formed(AllowanceDatum { ..allowance_fixtures.base_datum(), max_fee: 0 })
 }
 
 test v1_absurd_fee_counts_against_cap() fail {
@@ -198,6 +208,24 @@ test cap_zero_denies_that_asset() fail {
 test cap_zero_on_lovelace_denies_everything() fail {
   // The fee always leaves, so a zero lovelace cap denies every spend.
   run(with_datum(fn(d) { AllowanceDatum { ..d, caps: [lovelace_cap(0, 0), usd_cap(1000, 600)] } }))
+}
+
+test cap_zero_elsewhere_makes_allowance_malformed() fail {
+  // Caps must satisfy 0 < tx_cap <= window_cap. A zero cap on one asset makes
+  // the whole datum malformed, so even a lovelace-only spend is refused.
+  run(with_datum(fn(d) { AllowanceDatum { ..d, caps: [lovelace_cap(50_000_000, 20_000_000), usd_cap(1000, 0)] } }))
+}
+
+test cap_tx_above_window_malformed() fail {
+  run(with_datum(fn(d) { AllowanceDatum { ..d, caps: [lovelace_cap(50_000_000, 50_000_001), usd_cap(1000, 600)] } }))
+}
+
+test cap_tx_equal_to_window_ok() {
+  run(with_datum(fn(d) { AllowanceDatum { ..d, caps: [lovelace_cap(50_000_000, 50_000_000), usd_cap(1000, 600)] } }))
+}
+
+test cap_tx_cap_of_one_ok() {
+  run(with_datum(fn(d) { AllowanceDatum { ..d, caps: [lovelace_cap(50_000_000, 20_000_000), usd_cap(1000, 1)] } }))
 }
 
 test cap_missing_lovelace_denies_everything() fail {

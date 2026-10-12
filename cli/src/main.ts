@@ -1,4 +1,4 @@
-// vault: CLI for the Agent Allowance Vault. Every flow of the SDK is a command.
+// vault: CLI for gendo, budgeted on-chain accounts for AI agents. Every flow of the SDK is a command.
 //
 // State lives in $VAULT_HOME (default ./.vault): state.json (vault seed, ref
 // script) and keys/<name>.sk (0600; local test keys only, never custody).
@@ -106,6 +106,17 @@ function vaultOf(lucid: LucidEvolution): Vault {
   if (s.network !== lucid.config().network) die(`state is for ${s.network}, connected to ${lucid.config().network} (edge I5)`);
   return makeVault(lucid.config().network!, s.seed);
 }
+/** describeTx with each spent input's address looked up, so only the vault's own redeemers are named. */
+async function describe(lucid: LucidEvolution, cbor: string) {
+  const refs = cosign.describeTx(cbor).inputs.map((r) => {
+    const [txHash, i] = r.split("#");
+    return { txHash: txHash!, outputIndex: Number(i) };
+  });
+  const utxos = refs.length ? await lucid.utxosByOutRef(refs) : [];
+  const inputAddresses = Object.fromEntries(utxos.map((u) => [`${u.txHash}#${u.outputIndex}`, u.address]));
+  return cosign.describeTx(cbor, { vault: vaultOf(lucid), inputAddresses });
+}
+
 async function refScriptOf(lucid: LucidEvolution) {
   const s = loadState();
   if (!s.refScript) return undefined;
@@ -147,7 +158,7 @@ async function finishTx(lucid: LucidEvolution, tx: TxSignBuilder, v: { sign?: st
   const cbor = tx.toCBOR();
   if (v.out) {
     writeFileSync(v.out, cbor);
-    out({ unsigned: v.out, hash: tx.toHash(), witnessesNeeded: "every required signer, plus the proposer", summary: cosign.describeTx(cbor) });
+    out({ unsigned: v.out, hash: tx.toHash(), witnessesNeeded: "every required signer, plus the proposer", summary: await describe(lucid, cbor) });
     return;
   }
   // The proposer's wallet paid the fee, so their witness is always needed.
@@ -504,7 +515,8 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
   },
 
   async "tx describe"(argv) {
-    out(cosign.describeTx(readFileSync(argv[0] ?? die("usage: vault tx describe <tx.cbor>"), "utf8").trim()));
+    const cbor = readFileSync(argv[0] ?? die("usage: vault tx describe <tx.cbor>"), "utf8").trim();
+    out(await describe(await connect(providerFromEnv()), cbor));
   },
 
   async "tx witness"(argv) {
@@ -526,7 +538,7 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
     const first = cosign.describeTx(cbor).requiredSigners[0] ?? die("tx has no required signers");
     lucid.selectWallet.fromAddress(addressOf(lucid, first!), []);
     const signed = await cosign.assemble(lucid, cbor, wits.map((f) => readFileSync(f, "utf8").trim()));
-    const intent = cosign.describeTx(cbor).intent;
+    const intent = (await describe(lucid, cbor)).intent;
     // A fixed body can't be rebuilt here: on NeverLands the parties must build and sign a new one.
     try {
       out({ submitted: await submitSafely(lucid, signed.toCBOR(), intent ? { id: intent.id, allowance: intent.allowance } : undefined) });
@@ -546,6 +558,7 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
         dest: { type: "string" },
         "max-tx-per-hour": { type: "string", default: "20" },
         "max-ada-per-day": { type: "string", default: "100" },
+        "max-per-day": { type: "string" },
         "max-ttl": { type: "string", default: "15m" },
         "allow-cosigned": { type: "boolean" },
         audit: { type: "string" },
@@ -568,7 +581,17 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
         allowanceUnit: v.allowance ?? die("--allowance required"),
         destinations: list(v.dest),
         maxTxPerHour: Number(v["max-tx-per-hour"]),
-        maxLovelacePerDay: ada(v["max-ada-per-day"])!,
+        // Every asset that may leave needs a daily limit; tokens without one are refused.
+        maxPerDay: {
+          lovelace: ada(v["max-ada-per-day"])!,
+          ...Object.fromEntries(
+            list(v["max-per-day"]).map((e) => {
+              const [unit, qty] = e.split(":");
+              if (!unit || !qty || !/^\d+$/.test(qty)) die(`--max-per-day expects unit:quantity, got ${e}`);
+              return [unit, BigInt(qty!)];
+            }),
+          ),
+        },
         maxTtlMs: Number(duration(v["max-ttl"]!)),
         allowCoSigned: !!v["allow-cosigned"],
         slot: SLOT_CONFIG_NETWORK[lucid.config().network!],
@@ -591,7 +614,8 @@ const HELP = `vault <command>
   agent spend <unit> --to addr --ada N --intent-id ID --purpose "..." (--signer-socket path | --agent k) [--skip-preflight]
   agent overlimit <unit> --to addr --ada N --intent-id ID --purpose "..." --cosigners a,c --out tx.cbor
   tx describe <tx.cbor> | tx witness <tx.cbor> --key k --out k.wit | tx assemble <tx.cbor> <wits...>
-  signer start --key agent --allowance <unit> --dest addr1,addr2 [--socket path] [limits...]
+  signer start --key agent --allowance <unit> --dest addr1,addr2 [--socket path] [--max-ada-per-day N]
+               [--max-per-day unit:qty,...] [--max-tx-per-hour N] [--max-ttl 15m] [--allow-cosigned]
 env: VAULT_NETWORK=Preprod|Custom, BLOCKFROST_PROJECT_ID, VAULT_HOME`;
 
 

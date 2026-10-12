@@ -26,12 +26,18 @@ lib/vault/allowance.ak	n_dest <= max_destinations,	True,
 lib/vault/allowance.ak	VerificationKey\(_\) -> True\n          _ -> False	VerificationKey(_) -> True\n          _ -> True
 lib/vault/allowance.ak	n_caps >= 1,	True,
 lib/vault/allowance.ak	n_caps <= max_assets,	True,
-lib/vault/allowance.ak	c.window_cap >= 0 && c.tx_cap >= 0	True
+lib/vault/allowance.ak	0 < c.tx_cap && c.tx_cap <= c.window_cap	True
+lib/vault/allowance.ak	0 < c.tx_cap &&	0 <= c.tx_cap &&
+lib/vault/allowance.ak	0 < c.tx_cap &&	1 < c.tx_cap &&
+lib/vault/allowance.ak	&& c.tx_cap <= c.window_cap \}	&& c.tx_cap <= c.window_cap + 1 }
+lib/vault/allowance.ak	&& c.tx_cap <= c.window_cap \}	&& c.tx_cap < c.window_cap }
 lib/vault/allowance.ak	list.length\(d.spent\) == n_caps,	True,
 lib/vault/allowance.ak	list.all\(d.spent, fn\(s\) \{ s >= 0 \}\),	True,
 lib/vault/allowance.ak	d.period_ms > 0,	True,
 lib/vault/allowance.ak	d.expires_at > d.window_start,	True,
 lib/vault/allowance.ak	d.max_fee >= 0,	True,
+lib/vault/allowance.ak	d.max_fee >= 0,	d.max_fee >= -1,
+lib/vault/allowance.ak	d.max_fee >= 0,	d.max_fee > 0,
 lib/vault/allowance.ak	bytearray.length\(intent_hash\) == 32,	True,
 lib/vault/allowance.ak	!cfg.paused,	True,
 lib/vault/allowance.ak	!list.has\(cfg.owners, d.agent\),	True,

@@ -136,7 +136,7 @@ describe("signer-level dedupe (last line of defence against an honest double pay
         allowanceUnit: unit,
         destinations: [w.payee.address],
         maxTxPerHour: 50,
-        maxLovelacePerDay: 1_000n * ADA,
+        maxPerDay: { lovelace: 1_000n * ADA },
         maxTtlMs: 60 * 60_000,
         allowCoSigned: false,
         slot: SLOT_CONFIG_NETWORK[NETWORK],

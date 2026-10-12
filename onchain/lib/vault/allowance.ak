@@ -89,8 +89,9 @@ fn decode_allowance(own_input: Input) -> AllowanceDatum {
 /// spend (decision: deny by default). Every field is range-checked so that
 /// no malformed value can read as permissive:
 /// - empty allowlist, or any non-key destination: deny
-/// - no caps, too many caps, negative caps: deny (a 0 cap denies that asset;
-///   lovelace must be capped because the fee always leaves)
+/// - no caps, too many caps, or any cap outside 0 < tx_cap <= window_cap: deny
+///   (to forbid an asset, leave it out of `caps`; lovelace must be capped
+///   because the fee always leaves)
 /// - `spent` of the wrong length or with a negative entry: deny (a negative
 ///   entry would otherwise extend the cap)
 /// - period <= 0, expiry not after window start, negative max fee: deny
@@ -114,7 +115,7 @@ pub fn is_well_formed(d: AllowanceDatum) -> Bool {
     ),
     n_caps >= 1,
     n_caps <= max_assets,
-    list.all(d.caps, fn(c) { c.window_cap >= 0 && c.tx_cap >= 0 }),
+    list.all(d.caps, fn(c) { 0 < c.tx_cap && c.tx_cap <= c.window_cap }),
     list.length(d.spent) == n_caps,
     list.all(d.spent, fn(s) { s >= 0 }),
     d.period_ms > 0,

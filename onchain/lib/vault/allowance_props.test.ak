@@ -68,27 +68,42 @@ fn malformed_datum() -> Fuzzer<AllowanceDatum> {
             }
           },
         ),
-    // negative window or tx cap on either asset
-    fuzz.tuple3(fuzz.int_between(-1_000_000_000, -1), fuzz.bool(), fuzz.bool())
-      |> fuzz.map(
-          fn((neg, on_lovelace, on_window)) {
-            let caps =
-              if on_lovelace {
-                if on_window {
-                  [lovelace_cap(neg, 20_000_000), usd_cap(1000, 600)]
+    // cap out of range: negative window or tx cap on either asset, or a tx cap
+    // that is zero or above its window cap
+    fuzz.either(
+      fuzz.tuple3(fuzz.int_between(-1_000_000_000, -1), fuzz.bool(), fuzz.bool())
+        |> fuzz.map(
+            fn((neg, on_lovelace, on_window)) {
+              let caps =
+                if on_lovelace {
+                  if on_window {
+                    [lovelace_cap(neg, 20_000_000), usd_cap(1000, 600)]
+                  } else {
+                    [lovelace_cap(50_000_000, neg), usd_cap(1000, 600)]
+                  }
                 } else {
-                  [lovelace_cap(50_000_000, neg), usd_cap(1000, 600)]
+                  if on_window {
+                    [lovelace_cap(50_000_000, 20_000_000), usd_cap(neg, 600)]
+                  } else {
+                    [lovelace_cap(50_000_000, 20_000_000), usd_cap(1000, neg)]
+                  }
                 }
-              } else {
-                if on_window {
-                  [lovelace_cap(50_000_000, 20_000_000), usd_cap(neg, 600)]
+              AllowanceDatum { ..d, caps: caps }
+            },
+          ),
+      fuzz.both(fuzz.int_between(1, 1_000_000_000), fuzz.bool())
+        |> fuzz.map(
+            fn((window, zero_tx)) {
+              let tx =
+                if zero_tx {
+                  0
                 } else {
-                  [lovelace_cap(50_000_000, 20_000_000), usd_cap(1000, neg)]
+                  window + 1
                 }
-              }
-            AllowanceDatum { ..d, caps: caps }
-          },
-        ),
+              AllowanceDatum { ..d, caps: [lovelace_cap(window, tx), usd_cap(1000, 600)] }
+            },
+          ),
+    ),
     // negative spent (would otherwise extend the cap) or wrong length
     fuzz.both(fuzz.int_between(-1_000_000_000_000, -1), fuzz.int_between(0, 3))
       |> fuzz.map(
@@ -107,7 +122,7 @@ fn malformed_datum() -> Fuzzer<AllowanceDatum> {
     // expiry not after window start, or already past for the tx
     fuzz.int_between(t0 - 365 * day, t0 + hour + 10 * 60_000)
       |> fuzz.map(fn(e) { AllowanceDatum { ..d, expires_at: e } }),
-    // negative max fee, zero lovelace cap, or an agent key of the wrong length
+    // negative max fee, zero lovelace cap (malformed), or an agent key of the wrong length
     fuzz.both(fuzz.int_between(0, 2), fuzz.bytearray_between(0, 40))
       |> fuzz.map(
           fn((which, bytes)) {
@@ -145,7 +160,7 @@ fn well_formed_datum() -> Fuzzer<AllowanceDatum> {
   fuzz.tuple5(
     fuzz.int_between(1, max_destinations),
     fuzz.int_between(1, max_assets),
-    fuzz.int_between(0, 1_000_000_000),
+    fuzz.int_between(1, 1_000_000_000),
     fuzz.int_between(1, 365 * day),
     fuzz.int_between(0, 10_000_000),
   )
@@ -168,14 +183,11 @@ fn well_formed_datum() -> Fuzzer<AllowanceDatum> {
 // Layer 1: the read-time check itself
 
 test prop_is_well_formed_rejects_malformed(d via malformed_datum()) {
-  // Cases that are deny-by-value (zero cap, past expiry) are well formed but
-  // must still be denied; they are covered end to end by layer 2.
-  let deny_by_value = or {
-      d.caps == [lovelace_cap(0, 0), usd_cap(1000, 600)],
-      and {
-        d.expires_at > d.window_start,
-        d.expires_at <= t0 + hour + 10 * 60_000,
-      },
+  // A past expiry is well formed but must still be denied; layer 2 covers it
+  // end to end. Zero caps are malformed outright (0 < tx_cap <= window_cap).
+  let deny_by_value = and {
+      d.expires_at > d.window_start,
+      d.expires_at <= t0 + hour + 10 * 60_000,
     }
   deny_by_value || !is_well_formed(d)
 }

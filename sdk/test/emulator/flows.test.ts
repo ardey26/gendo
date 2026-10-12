@@ -101,10 +101,19 @@ describe("vault lifecycle (emulator)", () => {
     });
     expect(built.next.spent[0]).toBe(5n * ADA + built.fee);
     expect(built.fee).toBeLessThan(1n * ADA);
-    const summary = describeTx(built.tx.toCBOR());
+    const at = { [`${ctx.allowance.utxo.txHash}#${ctx.allowance.utxo.outputIndex}`]: ctx.allowance.utxo.address };
+    const summary = describeTx(built.tx.toCBOR(), { vault, inputAddresses: at });
     expect(summary.inputs).toHaveLength(1);
     expect(summary.intent?.purpose).toBe("pay invoice #1");
-    expect(summary.vaultRedeemers).toContain("spend:AgentSpend");
+    expect(summary.vaultRedeemers).toEqual(["spend:AgentSpend"]);
+    expect(summary.otherRedeemers).toEqual([]);
+    // The 28-byte allowance token name reads back as its exact unit.
+    expect(summary.outputs.find((o) => o.address === vault.address)?.assets[unit]).toBe("1");
+    // Without proof the input sits at the vault, nothing is attributed to it and no intent is read.
+    const blind = describeTx(built.tx.toCBOR(), { vault });
+    expect(blind.vaultRedeemers).toEqual([]);
+    expect(blind.otherRedeemers).toHaveLength(1);
+    expect(blind.intent).toBeUndefined();
     await signAndSubmit(lucid, emulator, built.tx, [w.agent]);
     const after = await readAllowance(lucid, vault, unit);
     expect(after.datum.spent[0]).toBe(5n * ADA + built.fee);
@@ -125,7 +134,7 @@ describe("vault lifecycle (emulator)", () => {
         allowanceUnit: unit,
         destinations: [w.payee.address], // stricter than on-chain: payee2 not allowed here
         maxTxPerHour: 10,
-        maxLovelacePerDay: 100n * ADA,
+        maxPerDay: { lovelace: 100n * ADA },
         maxTtlMs: 15 * 60_000,
         allowCoSigned: false,
         slot: SLOT_CONFIG_NETWORK.Custom,
@@ -172,7 +181,7 @@ describe("vault lifecycle (emulator)", () => {
         allowanceUnit: unit,
         destinations: [w.payee.address],
         maxTxPerHour: 2,
-        maxLovelacePerDay: 100n * ADA,
+        maxPerDay: { lovelace: 100n * ADA },
         maxTtlMs: 15 * 60_000,
         allowCoSigned: false,
         slot: SLOT_CONFIG_NETWORK.Custom,
@@ -256,7 +265,10 @@ describe("vault lifecycle (emulator)", () => {
       intentId: crypto.randomUUID(), purpose: "vendor prepayment",
       cosigners: [w.a.pkh, w.c.pkh],
     });
-    const summary = describeTx(built.tx.toCBOR());
+    const summary = describeTx(built.tx.toCBOR(), {
+      vault,
+      inputAddresses: { [`${ctx.allowance.utxo.txHash}#${ctx.allowance.utxo.outputIndex}`]: ctx.allowance.utxo.address },
+    });
     expect(summary.requiredSigners.sort()).toEqual([w.agent.pkh, w.a.pkh, w.c.pkh].sort());
     expect(summary.vaultRedeemers).toContain("spend:CoSignedSpend");
     await signAndSubmit(lucid, emulator, built.tx, [w.agent, w.a, w.c]);

@@ -1,4 +1,4 @@
-name = "noether/spike"
+name = "gendo/spike"
 version = "0.0.0"
 compiler = "v1.1.23"
 plutus = "v3"
@@ -6,8 +6,8 @@ license = "Apache-2.0"
 description = "M0 spike: single-input script spend, explicit collateral, multi-party witnesses"
 
 [repository]
-user = "noether"
-project = "spike"
+user = "ardey26"
+project = "gendo"
 platform = "github"
 
 [[dependencies]]

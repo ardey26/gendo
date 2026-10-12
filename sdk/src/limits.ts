@@ -35,7 +35,7 @@ export function wellFormedProblems(d: AllowanceDatum): string[] {
   if (d.destinations.length > MAX_DESTINATIONS) p.push("too many destinations");
   if (d.destinations.some((a) => a.payment.type !== "Key")) p.push("non-key destination");
   if (d.caps.length < 1 || d.caps.length > MAX_ASSETS) p.push("caps count out of range");
-  if (d.caps.some((c) => c.windowCap < 0n || c.txCap < 0n)) p.push("negative cap");
+  if (d.caps.some((c) => !(0n < c.txCap && c.txCap <= c.windowCap))) p.push("cap outside 0 < tx cap <= window cap");
   if (d.spent.length !== d.caps.length) p.push("spent length mismatch");
   if (d.spent.some((s) => s < 0n)) p.push("negative spent");
   if (d.periodMs <= 0n) p.push("period must be > 0");

@@ -1,4 +1,4 @@
-import { calculateMinLovelaceFromUTxO, type Assets, type LucidEvolution } from "@lucid-evolution/lucid";
+import { CML, calculateMinLovelaceFromUTxO, type Assets, type LucidEvolution } from "@lucid-evolution/lucid";
 
 export function add(...xs: Assets[]): Assets {
   const out: Assets = {};
@@ -33,3 +33,29 @@ export function withMinAda(lucid: LucidEvolution, address: string, assets: Asset
 
 export const fmt = (a: Assets) =>
   Object.fromEntries(Object.entries(a).map(([k, v]) => [k, v.toString()]));
+
+/** Policy id + raw asset-name hex. Not `to_cbor_hex().slice(2)`: that keeps a length byte for names of 24+ bytes. */
+export const unitOfAsset = (policy: CML.ScriptHash, name: CML.AssetName) =>
+  policy.to_hex() + Buffer.from(name.to_raw_bytes()).toString("hex");
+
+type AssetMap = {
+  keys(): CML.PolicyIdList;
+  get_assets(k: CML.ScriptHash): { keys(): CML.AssetNameList; get(k: CML.AssetName): bigint | undefined } | undefined;
+};
+
+/** Every asset in a CML multi-asset (or mint) map, keyed by unit. */
+export function multiAssetToAssets(ma: AssetMap | undefined): Assets {
+  const out: Assets = {};
+  if (!ma) return out;
+  const pols = ma.keys();
+  for (let p = 0; p < pols.len(); p++) {
+    const pol = pols.get(p);
+    const names = ma.get_assets(pol)!;
+    const ks = names.keys();
+    for (let n = 0; n < ks.len(); n++) out[unitOfAsset(pol, ks.get(n))] = names.get(ks.get(n))!;
+  }
+  return out;
+}
+
+/** A CML value as `Assets`, lovelace included. */
+export const valueToAssets = (v: CML.Value): Assets => ({ lovelace: v.coin(), ...multiAssetToAssets(v.multi_asset()) });

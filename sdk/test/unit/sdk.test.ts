@@ -53,6 +53,10 @@ describe("limits mirror", () => {
     expect(wellFormedProblems({ ...base, destinations: [] })).toContain("allowlist is empty");
     expect(wellFormedProblems({ ...base, spent: [-1n] })).toContain("negative spent");
     expect(wellFormedProblems({ ...base, periodMs: 0n })).toContain("period must be > 0");
+    const capOut = "cap outside 0 < tx cap <= window cap";
+    expect(wellFormedProblems({ ...base, caps: [{ policy: "", name: "", windowCap: 50n, txCap: 0n }] })).toContain(capOut);
+    expect(wellFormedProblems({ ...base, caps: [{ policy: "", name: "", windowCap: 50n, txCap: 51n }] })).toContain(capOut);
+    expect(wellFormedProblems({ ...base, caps: [{ policy: "", name: "", windowCap: 50n, txCap: 50n }] })).toEqual([]);
   });
   const cfg = { owners: [k(7)], threshold: 1n, paused: false, maxTxValidityMs: 50n };
   const args = { datum: base, config: cfg, fee: 1n, lower: 1010n, upper: 1020n, payTo: base.destinations };
@@ -104,18 +108,28 @@ describe("intent records", () => {
 });
 
 describe("signer policy", () => {
-  // Minimal tx: 1 input, outputs to the vault + a destination, ttl, required signer.
+  // Minimal tx: 1 input, outputs to the vault (carrying the allowance token) + a destination, ttl, required signer.
   const sk = CML.PrivateKey.from_bech32(generatePrivateKey());
   const agentPkh = sk.to_public().hash().to_hex();
   const vaultAddr = CML.EnterpriseAddress.new(0, CML.Credential.new_script(CML.ScriptHash.from_hex(k(5)))).to_address().to_bech32();
   const dest = CML.EnterpriseAddress.new(0, CML.Credential.new_pub_key(CML.Ed25519KeyHash.from_hex(k(6)))).to_address().to_bech32();
   const other = CML.EnterpriseAddress.new(0, CML.Credential.new_pub_key(CML.Ed25519KeyHash.from_hex(k(8)))).to_address().to_bech32();
-  const mkTx = (opts: { to?: string; lovelace?: bigint; ttl?: bigint; signer?: string; inputs?: number }) => {
+  // 28-byte names: the length CBOR-encodes as two bytes, which a naive `to_cbor_hex().slice(2)` keeps.
+  const allowanceUnit = k(5) + "a1".repeat(28);
+  const otherAllowance = k(5) + "a2".repeat(28);
+  const token = k(7) + "746f6b";
+  const value = (lovelace: bigint, units: Record<string, bigint>) => {
+    const ma = CML.MultiAsset.new();
+    for (const [u, q] of Object.entries(units))
+      ma.set(CML.ScriptHash.from_hex(u.slice(0, 56)), CML.AssetName.from_raw_bytes(Buffer.from(u.slice(56), "hex")), q);
+    return CML.Value.new(lovelace, ma);
+  };
+  const mkTx = (opts: { to?: string; lovelace?: bigint; ttl?: bigint; signer?: string; inputs?: number; carries?: string; pays?: Record<string, bigint> }) => {
     const ins = CML.TransactionInputList.new();
     for (let i = 0; i < (opts.inputs ?? 1); i++) ins.add(CML.TransactionInput.new(CML.TransactionHash.from_hex("11".repeat(32)), BigInt(i)));
     const outs = CML.TransactionOutputList.new();
-    outs.add(CML.TransactionOutput.new(CML.Address.from_bech32(vaultAddr), CML.Value.from_coin(10_000_000n)));
-    outs.add(CML.TransactionOutput.new(CML.Address.from_bech32(opts.to ?? dest), CML.Value.from_coin(opts.lovelace ?? 5_000_000n)));
+    outs.add(CML.TransactionOutput.new(CML.Address.from_bech32(vaultAddr), value(10_000_000n, { [opts.carries ?? allowanceUnit]: 1n })));
+    outs.add(CML.TransactionOutput.new(CML.Address.from_bech32(opts.to ?? dest), value(opts.lovelace ?? 5_000_000n, opts.pays ?? {})));
     const body = CML.TransactionBody.new(ins, outs, 200_000n);
     body.set_ttl(opts.ttl ?? 1_000n);
     const req = CML.Ed25519KeyHashList.new();
@@ -126,31 +140,60 @@ describe("signer policy", () => {
   const policy: SignerPolicy = {
     agentKeyHash: agentPkh,
     vaultAddress: vaultAddr,
-    allowanceUnit: "x",
+    allowanceUnit,
     destinations: [dest],
     maxTxPerHour: 2,
-    maxLovelacePerDay: 12_000_000n,
+    maxPerDay: { lovelace: 12_000_000n, [token]: 100n },
     maxTtlMs: 600_000,
     allowCoSigned: false,
     slot: { zeroTime: 0, zeroSlot: 0, slotLength: 1000 },
   };
+  const empty = () => ({ signed: [], intents: {} });
   const now = 900_000; // slot 900; ttl 1000 -> 100 s ahead
   it("signs a compliant tx", () => {
-    expect(evaluate(policy, { signed: [], intents: {} }, mkTx({}), now)).toEqual({ ok: true, lovelaceOut: 5_200_000n });
+    expect(evaluate(policy, empty(), mkTx({}), now)).toEqual({ ok: true, out: { lovelace: 5_200_000n } });
   });
   it("refuses unknown destinations, long TTLs, wrong signer, extra inputs", () => {
-    expect(evaluate(policy, { signed: [], intents: {} }, mkTx({ to: other }), now).ok).toBe(false);
-    expect(evaluate(policy, { signed: [], intents: {} }, mkTx({ ttl: 10_000n }), now).ok).toBe(false);
-    expect(evaluate(policy, { signed: [], intents: {} }, mkTx({ signer: k(9) }), now).ok).toBe(false);
-    expect(evaluate(policy, { signed: [], intents: {} }, mkTx({ inputs: 2 }), now).ok).toBe(false);
+    expect(evaluate(policy, empty(), mkTx({ to: other }), now).ok).toBe(false);
+    expect(evaluate(policy, empty(), mkTx({ ttl: 10_000n }), now).ok).toBe(false);
+    expect(evaluate(policy, empty(), mkTx({ signer: k(9) }), now).ok).toBe(false);
+    expect(evaluate(policy, empty(), mkTx({ inputs: 2 }), now).ok).toBe(false);
+  });
+  it("refuses extra inputs on the co-signed path too", () => {
+    const co = { ...policy, allowCoSigned: true };
+    expect(evaluate(co, empty(), mkTx({ inputs: 2 }), now)).toMatchObject({ ok: false, reason: expect.stringMatching(/exactly one input/) });
+  });
+  it("refuses a spend from any allowance other than the configured one", () => {
+    expect(evaluate(policy, empty(), mkTx({ carries: otherAllowance }), now)).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/does not carry allowance/),
+    });
   });
   it("rate-limits repeated max spends (prompt-injection loop)", () => {
-    const st = { signed: [{ at: now - 1000, lovelace: 5_200_000n }, { at: now - 500, lovelace: 5_200_000n }], intents: {} };
+    const st = { signed: [{ at: now - 1000, assets: { lovelace: 5_200_000n } }, { at: now - 500, assets: { lovelace: 5_200_000n } }], intents: {} };
     const d = evaluate(policy, st, mkTx({}), now);
     expect(d).toMatchObject({ ok: false });
   });
   it("enforces the daily budget", () => {
-    const st = { signed: [{ at: now - 4_000_000, lovelace: 8_000_000n }], intents: {} };
+    const st = { signed: [{ at: now - 4_000_000, assets: { lovelace: 8_000_000n } }], intents: {} };
     expect(evaluate(policy, st, mkTx({}), now)).toMatchObject({ ok: false, reason: expect.stringMatching(/daily budget/) });
+  });
+  it("counts native tokens against their own daily budget", () => {
+    expect(evaluate(policy, empty(), mkTx({ pays: { [token]: 60n } }), now)).toEqual({
+      ok: true,
+      out: { lovelace: 5_200_000n, [token]: 60n },
+    });
+    const st = { signed: [{ at: now - 4_000_000, assets: { lovelace: 1n, [token]: 60n } }], intents: {} };
+    expect(evaluate(policy, st, mkTx({ pays: { [token]: 60n } }), now)).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/daily budget: .*746f6b 60 \+ 60 > 100/),
+    });
+  });
+  it("refuses an asset that has no daily limit (deny by default)", () => {
+    const stray = k(9) + "00";
+    expect(evaluate(policy, empty(), mkTx({ pays: { [stray]: 1n } }), now)).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/has no daily limit/),
+    });
   });
 });
