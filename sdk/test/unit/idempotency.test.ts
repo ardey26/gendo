@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { withRetries } from "../../src/provider.js";
 import {
   AlreadyPaid,
   MemoryJournal,
@@ -85,5 +86,43 @@ describe("assertNotPaid", () => {
   });
   it("stops at the mint and reports 'not found' rather than guessing", async () => {
     expect(await findIntentOnChain(lineage("u"), "u", CUR, "INV-2", 7041)).toBeNull();
+  });
+});
+
+describe("provider retries", () => {
+  const flaky = (failures: number, error: string) => {
+    let calls = 0;
+    return {
+      calls: () => calls,
+      p: {
+        async getUtxos() {
+          calls++;
+          if (calls <= failures) throw new Error(error);
+          return ["utxo"];
+        },
+        async submitTx() {
+          calls++;
+          throw new Error("TimeoutError: The operation was aborted due to timeout");
+        },
+      },
+    };
+  };
+  it("retries a read that timed out, then succeeds", async () => {
+    const f = flaky(2, "(FiberFailure) TimeoutError: The operation was aborted due to timeout");
+    await expect(withRetries(f.p, { baseMs: 1 }).getUtxos()).resolves.toEqual(["utxo"]);
+    expect(f.calls()).toBe(3);
+  });
+  it("gives up after the last attempt", async () => {
+    const f = flaky(9, "fetch failed");
+    await expect(withRetries(f.p, { attempts: 3, baseMs: 1 }).getUtxos()).rejects.toThrow(/fetch failed/);
+    expect(f.calls()).toBe(3);
+  });
+  it("doesn't retry a real error, or a submit", async () => {
+    const f = flaky(9, "BadInputsUTxO");
+    await expect(withRetries(f.p, { baseMs: 1 }).getUtxos()).rejects.toThrow(/BadInputs/);
+    expect(f.calls()).toBe(1);
+    const g = flaky(0, "");
+    await expect(withRetries(g.p, { baseMs: 1 }).submitTx()).rejects.toThrow(/Timeout/);
+    expect(g.calls()).toBe(1);
   });
 });

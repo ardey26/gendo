@@ -64,6 +64,40 @@ function installFetchRetry() {
   }) as typeof fetch;
 }
 
+/** A provider failure worth retrying: a timeout, a dropped connection or a gateway error. */
+export const isTransient = (e: unknown) =>
+  /TimeoutError|aborted due to timeout|fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|\b50[234]\b/.test(String((e as Error)?.message ?? e));
+
+/** Provider calls that only read, so repeating one is always safe. */
+const READS = new Set(["getProtocolParameters", "getUtxos", "getUtxosWithUnit", "getUtxoByUnit", "getUtxosByOutRef", "getDelegation", "getDatum", "evaluateTx"]);
+
+/**
+ * Retry read calls that fail transiently. Lucid gives up on a single request
+ * after 30 s, and on preprod Blockfrost has stalled past that, failing whole
+ * flows. Submissions are not retried here: a submit that timed out may have
+ * landed, and the fate check in idempotency.ts decides that.
+ */
+export function withRetries<P extends object>(provider: P, opts: { attempts?: number; baseMs?: number } = {}): P {
+  const attempts = opts.attempts ?? 4;
+  const baseMs = opts.baseMs ?? 2000;
+  return new Proxy(provider, {
+    get(target, prop, receiver) {
+      const v = Reflect.get(target, prop, receiver);
+      if (typeof v !== "function" || !READS.has(String(prop))) return v;
+      return async (...args: unknown[]) => {
+        for (let i = 0; ; i++) {
+          try {
+            return await v.apply(target, args);
+          } catch (e) {
+            if (i >= attempts - 1 || !isTransient(e)) throw e;
+            await new Promise((r) => setTimeout(r, baseMs * 2 ** i));
+          }
+        }
+      };
+    },
+  });
+}
+
 export async function connect(cfg: ProviderConfig): Promise<LucidEvolution> {
   installFetchRetry();
   if (cfg.devnet) {
@@ -82,7 +116,7 @@ export async function connect(cfg: ProviderConfig): Promise<LucidEvolution> {
       }) as typeof fetch;
     }
   }
-  const lucid = await Lucid(new Blockfrost(cfg.blockfrostUrl, cfg.blockfrostProjectId), cfg.network);
+  const lucid = await Lucid(withRetries(new Blockfrost(cfg.blockfrostUrl, cfg.blockfrostProjectId)), cfg.network);
   // Edge I5: the provider must agree on the network.
   if (cfg.network === "Preprod") {
     const r = await fetch(`${cfg.blockfrostUrl}/genesis`, { headers: { project_id: cfg.blockfrostProjectId } });

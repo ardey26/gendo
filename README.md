@@ -109,8 +109,9 @@ cli/test/signer-user.sh                 # the signer as its own Linux user (runs
 mcp/test/e2e.sh                         # an MCP client driving the agent's three tools
 agent/test/e2e.sh                       # LLM agent (local Ollama model) paying invoices through the signer
 
-# the same attack + double-pay suites against real preprod (PV11)
-ADV_TARGET=preprod BLOCKFROST_PROJECT_ID=preprod... FUNDER_KEY=path/to/funded.sk npx vitest run test/yaci
+# the same attack + double-pay suites against real preprod (PV11). One full run makes about
+# 46,000 Blockfrost calls, close to the free plan's 50,000 a day: run it at most once a day.
+ADV_TARGET=preprod BLOCKFROST_PROJECT_ID=preprod... FUNDER_KEY=path/to/funded.sk npx vitest run test/yaci --no-file-parallelism
 
 # preprod demo
 demo/preprod.sh setup                   # prints the one address to fund from the faucet
@@ -383,7 +384,7 @@ Test counts at the time of writing:
 | LLM agent end-to-end (devnet) | safety checks pass; escalation co-signed |
 | Preprod demo (all links in `demo/RESULTS.md`) | 16 txs, 11 refusals, including two LLM agent runs |
 
-The devnet suites, CLI smoke checks and LLM agent run have been re-run against the current vault hash. The preprod counts come from the build before the `0 < tx_cap ≤ window_cap` change (see `docs/AUDIT_BRIEF.md` §1a) and haven't been re-run yet.
+Every suite above has been re-run against the current vault hash, preprod included (34/34 attacks and 6/6 double-pay scenarios). The preprod demo (`demo/RESULTS.md`) is from the earlier build.
 
 ## License
 
