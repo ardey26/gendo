@@ -3,260 +3,665 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#161826">
+<meta name="theme-color" content="#0d0b09">
 <title>gendo</title>
-<meta name="description" content="Budgeted on-chain accounts for AI agents. Owners approve, agents pay inside an allowance, enforced on-chain on Cardano.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M15 3 A13 13 0 0 0 15 29 Z' fill='%239184d9'/%3E%3Cpath d='M17 4.6 A11.4 11.4 0 0 1 17 27.4' fill='none' stroke='%23e9e9ed' stroke-width='3.5'/%3E%3C/svg%3E">
+<meta name="description" content="Budgeted on-chain accounts for AI agents on Cardano. Owners keep the keys, the agent spends inside an allowance, the chain enforces the limits.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Ccircle cx='13' cy='13' r='12' fill='%230d0b09' stroke='%23efe7d8' stroke-width='2'/%3E%3Cpath d='M13 1a12 12 0 0 1 0 24z' fill='%23e0452b'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Shippori+Mincho+B1:wght@700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #161826;
-    --surface: #232532;
-    --text: #e9e9ed;
-    --accent: #9184d9;
-    --n300: #cfd3e5; --n400: #b2b6ca; --n500: #9397ab; --n600: #75798c; --n700: #595d6c; --n800: #3f424d; --n900: #292b31;
-    --a200: #e7e5fe; --a300: #d2cefd; --a400: #b5abfc; --a700: #5d5294; --a800: #423a6a; --a900: #2b2741;
-    --no: #e0838c; --no-text: #f0b4b9; --no-bg: #4a2a33; --no-line: #6b3a44;
-    --edge: 0 0 0 1px #3f424d;
-    --r-sm: 4px; --r-md: 8px; --r-lg: 14px;
+    --ink: #0d0b09; --ink-2: #0f0d0a; --ink-3: #110f0c; --ink-4: #15120f; --ink-5: #1a1612; --ink-6: #241e18;
+    --line: #2a241e; --line-2: #3a332b;
+    --paper: #efe7d8; --paper-2: #d9cfbc; --paper-3: #c9bfae;
+    --mute: #8f8578; --soft: #b9afa0; --brown: #4a4038;
+    --red: #e0452b; --red-ink: #b5301b; --red-line: #4a2a24;
+    --sans: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    --serif: "Shippori Mincho B1", "Hiragino Mincho ProN", serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+    --pad: clamp(20px, 5vw, 72px);
   }
   * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 400 15px/1.55 "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-  a { color: var(--accent); text-underline-offset: 3px; }
-  a:hover { color: var(--a400); }
-  ::selection { background: rgba(145,132,217,.3); }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  body { margin: 0; background: var(--ink); color: var(--paper); font: 400 16px/1.5 var(--sans); -webkit-font-smoothing: antialiased; overflow-x: clip; }
+  a { color: var(--paper); }
+  a:hover { color: var(--red); }
+  ::selection { background: var(--red); color: var(--ink); }
   :focus { outline: none; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
-  h1, h2 { font-weight: 500; margin: 0; }
+  :focus-visible { outline: 2px solid var(--red); outline-offset: 3px; border-radius: 4px; }
+  h1, h2, h3, p { margin: 0; }
+  ol { list-style: none; margin: 0; padding: 0; }
+  svg { display: block; }
 
-  .page { max-width: 1344px; margin: 0 auto; padding: 0 72px; }
+  .kanji { font-family: var(--serif); font-weight: 700; line-height: 1; }
+  .mono { font-family: var(--mono); }
+  .wrap { position: relative; max-width: 1280px; margin: 0 auto; padding-left: var(--pad); padding-right: var(--pad); }
+  .grain { position: fixed; inset: 0; width: 100%; height: 100%; opacity: .07; pointer-events: none; mix-blend-mode: screen; z-index: 0; }
+  header, main, footer { position: relative; z-index: 1; }
 
-  header { display: flex; justify-content: space-between; align-items: center; padding: 24px 0; }
-  .brand { display: flex; align-items: center; gap: 8px; font-size: 19px; font-weight: 600; letter-spacing: -.03em; color: var(--text); text-decoration: none; }
-  .gh { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text); text-decoration: none; }
-  .gh i { font-size: 18px; }
+  /* hanko: the vermilion seal */
+  .seal { flex: none; display: flex; align-items: center; justify-content: center; background: var(--red); color: var(--paper); border-radius: 8px; box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--red); }
+  .seal span { font-family: var(--serif); font-weight: 800; writing-mode: vertical-rl; line-height: 1; letter-spacing: .04em; }
+  .seal.on-paper { box-shadow: inset 0 0 0 2px var(--paper), inset 0 0 0 4px var(--red); }
+  .seal.empty { background: transparent; box-shadow: none; border: 2px dashed var(--line-2); }
 
-  .hero { padding: 88px 0 56px; display: flex; flex-direction: column; gap: 20px; }
-  h1 { font-size: 84px; line-height: 1; letter-spacing: -.04em; text-wrap: balance; }
-  .lede { font-size: 22px; color: var(--n400); margin: 0; }
-  .install { display: flex; align-self: flex-start; align-items: center; gap: 14px; max-width: 100%; background: var(--surface); box-shadow: var(--edge); border-radius: var(--r-md); padding: 8px 8px 8px 16px; font: 500 15px "Inter", system-ui, sans-serif; margin-top: 12px; }
-  .install code { font: inherit; overflow-x: auto; white-space: nowrap; }
-  .install code::before { content: "$ "; color: var(--n600); }
-  .copy { flex: none; font: 500 13px "Inter", sans-serif; color: var(--a300); background: transparent; border: 1px solid var(--accent); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
-  .copy:hover { background: var(--a900); }
+  /* nav */
+  .nav { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-top: 28px; padding-bottom: 28px; }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .brand b { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+  .brand .kanji { font-size: 14px; color: var(--mute); }
+  .nav nav { display: flex; align-items: center; gap: 28px; font-size: 15px; }
+  .nav nav a { color: var(--soft); text-decoration: none; }
+  .nav nav a:hover { color: var(--paper); }
+  .pill { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--paper) !important; }
+  .pill:hover { border-color: var(--paper); }
 
-  /* flow diagram: owners -> vault -> agent -> payees */
-  .flow { background: linear-gradient(180deg, #1c1e2e, var(--bg)); box-shadow: var(--edge); border-radius: var(--r-lg); padding: 48px 40px 40px; }
-  .flow-row { display: grid; grid-template-columns: auto 1fr 260px 1fr auto 1fr auto; align-items: center; gap: 16px; }
-  .wire { position: relative; height: 1px; background: var(--a700); }
-  .node { display: flex; flex-direction: column; align-items: center; gap: 12px; font-size: 15px; color: var(--n300); }
-  .owners { display: flex; }
-  .owner { width: 52px; height: 52px; border-radius: 50%; background: var(--n900); box-shadow: inset 0 0 0 1.5px var(--n700); display: grid; place-items: center; color: var(--a200); font-size: 22px; }
-  .owner + .owner { margin-left: -10px; }
-  .owner.on { background: var(--a800); box-shadow: inset 0 0 0 1.5px var(--accent); }
-  .vault { background: var(--surface); box-shadow: inset 0 0 0 1px var(--a700); border-radius: var(--r-md); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-  .vault-head { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--n500); }
-  .vault-head span:first-child { display: flex; align-items: center; gap: 6px; }
-  .allow { background: var(--a900); box-shadow: inset 0 0 0 1px var(--accent); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-  .allow-head { display: flex; justify-content: space-between; font-size: 13px; color: var(--a300); }
-  .meter { position: relative; height: 8px; border-radius: 999px; background: var(--n900); }
-  .meter-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); border-radius: 999px; transition: width .6s cubic-bezier(.2,.7,.2,1); }
-  .agent { width: 64px; height: 64px; border-radius: var(--r-md); background: var(--surface); box-shadow: inset 0 0 0 1px var(--n700); display: grid; place-items: center; font-size: 32px; color: var(--text); }
-  .chip { position: absolute; left: 50%; top: -32px; transform: translateX(-50%); white-space: nowrap; font: 500 12px "Inter", system-ui, sans-serif; font-variant-numeric: tabular-nums; color: var(--n500); background: transparent; border-radius: var(--r-sm); padding: 4px 8px; transition: color .3s, background .3s; }
-  .chip.ok { color: var(--a300); background: var(--a900); }
-  .chip.no { color: var(--no-text); background: var(--no-bg); }
-  .payees { display: flex; flex-direction: column; gap: 10px; }
-  .payee { width: 40px; height: 40px; border-radius: 50%; background: var(--a900); box-shadow: inset 0 0 0 1px var(--a700); display: grid; place-items: center; color: var(--a300); font-size: 18px; }
-  .payee.no { background: transparent; box-shadow: inset 0 0 0 1px var(--no-line); color: var(--no); }
+  /* install box */
+  .install { display: inline-flex; align-items: center; gap: 12px; max-width: 100%; min-height: 52px; padding: 6px 6px 6px 18px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--ink-3); font: 400 15px var(--mono); }
+  .install .dollar { color: var(--red); }
+  .install code { font: inherit; user-select: all; white-space: nowrap; overflow-x: auto; }
+  .copy { flex: none; font: 400 13px var(--mono); min-height: 40px; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--ink-5); color: var(--paper); cursor: pointer; }
+  .copy:hover { border-color: var(--paper); }
 
-  section { padding: 120px 0 0; }
-  h2 { font-size: 44px; line-height: 1.05; letter-spacing: -.03em; }
+  /* hero */
+  .hero { min-height: 680px; display: flex; align-items: center; padding-top: clamp(56px, 8vw, 120px); padding-bottom: clamp(72px, 8vw, 120px); }
+  .hero-ghost { position: absolute; right: var(--pad); top: 0; bottom: 0; display: flex; align-items: center; pointer-events: none; }
+  .hero-ghost span { writing-mode: vertical-rl; font-family: var(--serif); font-weight: 800; font-size: clamp(140px, 24vw, 360px); line-height: 1; color: transparent; -webkit-text-stroke: 1px var(--line-2); }
+  .hero-copy { position: relative; display: flex; flex-direction: column; gap: 28px; max-width: 880px; }
+  h1 { font-weight: 900; font-size: clamp(46px, 7.4vw, 112px); line-height: .96; letter-spacing: -.035em; text-wrap: balance; }
+  .lede { font-size: clamp(18px, 1.6vw, 22px); color: var(--soft); max-width: 620px; text-wrap: pretty; }
+  .hero .install { align-self: flex-start; margin-top: 8px; }
+  .hero-seal { position: absolute; right: clamp(24px, 9vw, 160px); bottom: clamp(24px, 5vw, 72px); width: 104px; height: 104px; border-radius: 10px; box-shadow: inset 0 0 0 3px var(--ink), inset 0 0 0 5px var(--red); transform: rotate(-7deg); mix-blend-mode: screen; }
+  .hero-seal span { font-size: 40px; }
 
-  .how { display: grid; grid-template-columns: 280px 1fr; gap: 56px; align-items: start; }
-  .steps { display: grid; grid-template-columns: repeat(4, 1fr); }
-  .step { display: flex; flex-direction: column; gap: 14px; padding-right: 20px; }
-  .step:last-child { padding-right: 0; }
-  .step-top { display: flex; align-items: center; gap: 10px; }
-  .step-top::after { content: ""; flex: 1; height: 1px; background: var(--a700); }
-  .step:last-child .step-top::after { display: none; }
-  .badge { width: 44px; height: 44px; flex: none; border-radius: 50%; background: var(--a900); box-shadow: inset 0 0 0 1px var(--accent); display: grid; place-items: center; color: var(--a300); font-size: 20px; }
-  .step b { font-size: 17px; font-weight: 500; }
-  .step span { font-size: 15px; color: var(--n500); }
+  /* sections */
+  .band { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--ink-2); }
+  .section { padding-top: clamp(72px, 9vw, 140px); padding-bottom: clamp(72px, 9vw, 140px); }
+  h2 { font-weight: 900; letter-spacing: -.035em; line-height: .98; text-wrap: balance; }
+  h3 { font-size: 18px; font-weight: 700; line-height: 1.3; }
+  .card { border: 1px solid var(--line); border-radius: 14px; background: var(--ink); }
+  .sub { color: var(--soft); line-height: 1.5; }
 
-  .enforced { display: flex; flex-direction: column; gap: 40px; }
-  .enforced h2 { text-align: center; }
-  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
-  .tile { background: var(--surface); border-radius: var(--r-md); padding: 24px 20px; height: 200px; display: flex; flex-direction: column; justify-content: space-between; gap: 24px; }
-  .tile b { font-size: 17px; font-weight: 500; }
-  .pic { height: 56px; display: flex; align-items: center; position: relative; color: var(--a400); }
-  .pic > i { font-size: 52px; }
-  .cap { position: relative; width: 100%; height: 12px; border-radius: 999px; background: var(--n900); }
-  .cap .in { position: absolute; left: 0; top: 0; bottom: 0; width: 62%; background: var(--accent); border-radius: 999px; }
-  .cap .over { position: absolute; left: 62%; top: 0; bottom: 0; width: 30%; background: var(--no); opacity: .4; border-radius: 0 999px 999px 0; }
-  .cap .line { position: absolute; left: 62%; top: -10px; bottom: -10px; width: 2px; background: var(--text); }
-  .bars { align-items: flex-end; gap: 6px; }
-  .bars::before { content: ""; position: absolute; left: 0; right: 0; top: 12px; height: 2px; background: var(--text); }
-  .bars span { flex: 1; background: var(--accent); border-radius: 3px; }
-  .bars span:last-child { background: var(--a700); }
-  .dots { gap: 8px; }
-  .dot { width: 40px; height: 40px; border-radius: 50%; background: var(--a800); display: grid; place-items: center; color: var(--a200); font-size: 18px; }
-  .dot.no { background: transparent; box-shadow: inset 0 0 0 1px var(--no-line); color: var(--no); }
+  /* flow band */
+  .flow { display: flex; flex-direction: column; gap: 40px; padding-top: clamp(40px, 5vw, 64px); padding-bottom: clamp(40px, 5vw, 64px); }
+  .flow h2 { font-size: clamp(26px, 3vw, 40px); font-weight: 700; letter-spacing: -.02em; text-align: center; }
+  .flow-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+  .flow-card { display: flex; flex-direction: column; gap: 18px; padding: 28px; }
+  .flow-card .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .flow-card .top .kanji { font-size: 30px; }
+  .flow-card .top .mono { font-size: 12px; color: var(--mute); }
+  .flow-card p { font-size: 15px; color: var(--soft); }
+  .seals { display: flex; gap: 12px; }
+  .seals .seal { width: 56px; height: 56px; }
+  .seals .seal span { font-size: 22px; }
+  .allowance { position: relative; overflow: hidden; gap: 16px; border-color: var(--red); background: #120e0b; }
+  .allowance > * { position: relative; }
+  .allowance .bg-kanji { position: absolute; right: -8px; top: -18px; font-size: 120px; font-weight: 800; color: #1d1712; }
+  .allowance .name { font-weight: 700; font-size: 17px; }
+  .allowance .top .tag { font-size: 12px; color: var(--red); letter-spacing: .08em; }
+  .amount { display: flex; align-items: baseline; gap: 8px; font-family: var(--mono); }
+  .amount b { font-size: 40px; font-weight: 500; letter-spacing: -.02em; }
+  .amount span { font-size: 18px; color: var(--mute); }
+  .meter { height: 8px; border-radius: 999px; background: var(--ink-6); overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 28%; background: var(--red); border-radius: 999px; transform-origin: left; }
+  .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; font: 12px var(--mono); }
+  .facts div { display: flex; flex-direction: column; gap: 4px; }
+  .facts dt { color: var(--mute); }
+  .facts dd { margin: 0; color: var(--paper); }
+  .pays { display: flex; flex-direction: column; gap: 10px; }
+  .pays div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 8px; background: var(--ink-4); font: 13px var(--mono); }
+  .pays div.no { background: transparent; border: 1px dashed var(--red-line); color: var(--mute); }
+  .pays div.no span:last-child { color: var(--red); }
 
-  .rules { display: grid; grid-template-columns: 1.4fr 1fr; gap: 56px; align-items: center; }
-  .rules h2 { order: 2; text-align: right; }
-  .log { background: #10111b; box-shadow: var(--edge); border-radius: var(--r-md); padding: 24px; display: flex; flex-direction: column; gap: 14px; font: 400 15px "Inter", system-ui, sans-serif; font-variant-numeric: tabular-nums; }
-  .log div { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-  .log div > span:first-child { color: var(--n300); }
-  .log div > span:last-child { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-  .log i { font-size: 18px; }
-  .paid { color: var(--a300); }
-  .refused { color: var(--no); }
-  .dup { color: var(--n400); }
+  /* connect */
+  .connect { display: flex; flex-wrap: wrap; padding-top: clamp(40px, 5vw, 64px); }
+  .connect-k { display: flex; align-items: center; gap: 14px; padding: 0 40px 28px 0; min-width: 200px; }
+  .connect-k .kanji { font-size: 30px; color: var(--red); }
+  .connect-k .mono { font-size: 13px; color: var(--mute); letter-spacing: .08em; text-transform: uppercase; }
+  .connect-i { flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px; padding: 0 32px 28px 28px; border-left: 1px solid var(--line); }
+  .connect-i b { font-size: 24px; font-weight: 900; letter-spacing: -.02em; }
+  .connect-i span { font-size: 15px; color: var(--soft); }
+  .connect-i code { font: 13px var(--mono); color: var(--paper); }
+  .connect-rule { border-bottom: 1px solid var(--line); }
 
-  footer { padding: 120px 0 32px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 14px; color: var(--n500); }
-  footer a { color: var(--n500); }
+  /* how it works */
+  .how { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 48px; align-items: start; }
+  .how-head { display: flex; flex-direction: column; gap: 16px; }
+  .how-head h2 { font-size: clamp(34px, 4vw, 56px); line-height: 1; }
+  .how-head p { font-size: 17px; }
+  .steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .step { display: flex; flex-direction: column; overflow: hidden; background: var(--ink-2); }
+  .step-pic { position: relative; height: 200px; display: flex; align-items: center; justify-content: center; padding: 0 22px; border-bottom: 1px solid var(--line); background: var(--ink); }
+  .step-k { position: absolute; left: 18px; top: 14px; font-size: 28px; color: var(--line-2); transition: color .2s; }
+  .step:hover .step-k { color: var(--red); }
+  .step-n { position: absolute; right: 18px; top: 18px; font-size: 12px; color: var(--mute); }
+  .step-cap { position: absolute; bottom: 16px; left: 0; right: 0; text-align: center; font: 12px var(--mono); color: var(--mute); }
+  .step-body { display: flex; flex-direction: column; gap: 6px; padding: 20px 22px 24px; }
+  .step-body p { font-size: 15px; color: var(--soft); }
+  .s1 { display: flex; align-items: center; gap: 14px; }
+  .s1 .seal { width: 54px; height: 54px; }
+  .s1 .seal span { font-size: 22px; }
+  .mini { width: 100%; max-width: 230px; display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--red); border-radius: 10px; background: #120e0b; transform: rotate(-2deg); }
+  .mini .row { display: flex; justify-content: space-between; font: 11px var(--mono); color: var(--mute); }
+  .bar { position: relative; height: 6px; border-radius: 999px; background: var(--ink-6); }
+  .bar i { display: block; height: 100%; border-radius: 999px; background: var(--red); }
+  .tick { position: absolute; width: 2px; background: var(--paper); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chips span { font: 10px var(--mono); padding: 3px 7px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--soft); }
+  .s2-seal { position: absolute; right: 24px; bottom: 18px; width: 44px; height: 44px; border-radius: 6px; transform: rotate(10deg); box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--red); }
+  .s2-seal span { font-size: 16px; }
+  .s3 { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 240px; }
+  .box { flex: none; width: 48px; height: 48px; border-radius: 10px; border: 1px solid var(--line-2); display: flex; align-items: center; justify-content: center; }
+  .arrow { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: var(--mono); }
+  .arrow .amt { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--ink-5); }
+  .arrow .line { position: relative; width: 100%; height: 1px; background: var(--line-2); }
+  .arrow .line::after { content: ""; position: absolute; right: -1px; top: -4px; border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent; border-left: 7px solid var(--line-2); }
+  .arrow .note { font-size: 10px; color: var(--red); }
+  .s4 { width: 100%; max-width: 240px; display: flex; flex-direction: column; gap: 10px; }
+  .s4 .row { display: flex; justify-content: space-between; font: 12px var(--mono); }
+  .over { position: relative; height: 10px; border-radius: 999px; background: var(--ink-6); }
+  .over .in { position: absolute; left: 0; top: 0; bottom: 0; width: 42%; background: var(--paper); border-radius: 999px 0 0 999px; }
+  .over .out { position: absolute; left: 42%; top: 0; bottom: 0; width: 58%; background: var(--red); opacity: .55; border-radius: 0 999px 999px 0; }
+  .over .tick { left: 42%; top: -6px; height: 22px; }
+  .s4 .pair { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+  .s4 .seal { width: 40px; height: 40px; border-radius: 6px; box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--red); }
+  .s4 .seal span { font-size: 15px; }
+
+  /* rules (paper) */
+  .rules { background: var(--paper); color: var(--ink); }
+  .rules-in { display: flex; flex-direction: column; gap: 56px; }
+  .rules-head { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 760px; margin: 0 auto; text-align: center; }
+  .rules-head h2 { font-size: clamp(36px, 5vw, 72px); }
+  .rules-head p { font-size: 18px; color: var(--brown); max-width: 600px; }
+  .rule-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; width: 100%; max-width: 1080px; margin: 0 auto; background: var(--ink); border: 2px solid var(--ink); border-radius: 16px; overflow: hidden; }
+  .rule { display: flex; flex-direction: column; background: var(--paper); transition: background .2s; }
+  .rule:hover { background: #e9e0cf; }
+  .rule-pic { position: relative; height: 170px; display: flex; align-items: center; justify-content: center; padding: 22px 24px 0; border-bottom: 1px solid var(--paper-2); }
+  .rule-pic > .kanji { position: absolute; left: 18px; top: 12px; font-size: 26px; color: var(--red); }
+  .rule-pic .corner { position: absolute; right: 18px; top: 16px; font: 11px var(--mono); color: var(--brown); }
+  .rule-body { display: flex; flex-direction: column; gap: 6px; padding: 18px 22px 24px; }
+  .rule-body p { font-size: 14px; color: var(--brown); }
+  .r-col { width: 100%; max-width: 190px; display: flex; flex-direction: column; gap: 8px; font: 11px var(--mono); color: var(--brown); }
+  .r-col .row { display: flex; justify-content: space-between; }
+  .refused { color: var(--red-ink); font-weight: 500; }
+  .track { position: relative; height: 10px; border-radius: 999px; background: var(--paper-2); }
+  .track i { display: block; height: 100%; background: var(--ink); border-radius: 999px; }
+  .track .full { border-radius: 999px 0 0 999px; }
+  .track .limit { position: absolute; left: 100%; top: -8px; width: 3px; height: 26px; background: var(--red); }
+  .track .spill { position: absolute; left: 100%; top: 0; width: 28px; height: 100%; background: repeating-linear-gradient(135deg, var(--red) 0 3px, transparent 3px 6px); border-radius: 0 999px 999px 0; }
+  .r-bars { position: relative; width: 100%; max-width: 190px; height: 90px; display: flex; align-items: flex-end; gap: 6px; margin-bottom: 30px; }
+  .r-bars::before { content: ""; position: absolute; left: -8px; right: -8px; top: 0; height: 2px; background: var(--red); }
+  .r-bars i { flex: 1; background: var(--ink); border-radius: 3px 3px 0 0; }
+  .r-bars i:last-child { background: var(--red); }
+  .r-days { position: absolute; bottom: 10px; left: 0; right: 0; text-align: center; font: 10px var(--mono); color: var(--brown); letter-spacing: .1em; }
+  .addr { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border: 1px solid var(--ink); border-radius: 6px; color: var(--ink); font-size: 12px; }
+  .addr .kanji { font-size: 13px; color: var(--red-ink); border: 1.5px solid var(--red-ink); border-radius: 3px; padding: 0 3px; }
+  .addr.no { border-style: dashed; border-color: var(--mute); color: var(--brown); }
+  .addr.no::after { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; height: 2px; background: var(--red); transform: rotate(-3deg); }
+  .ring { position: relative; width: 92px; height: 92px; border-radius: 50%; background: conic-gradient(var(--red) 0 78%, var(--paper-2) 78% 100%); }
+  .ring div { position: absolute; inset: 12px; border-radius: 50%; background: var(--paper); display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: var(--mono); }
+  .ring b { font-size: 22px; font-weight: 500; line-height: 1; }
+  .ring span { font-size: 9px; color: var(--brown); letter-spacing: .1em; }
+  .r-exp { display: flex; align-items: center; gap: 18px; }
+  .r-exp .r-col { gap: 6px; max-width: none; width: auto; }
+  .paused { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; max-width: 190px; }
+  .paused div { height: 34px; border-radius: 6px; border: 1px solid var(--ink); display: flex; align-items: center; justify-content: center; color: var(--mute); }
+  .pause-seal { position: absolute; right: 16px; bottom: 10px; width: 56px; height: 56px; transform: rotate(-9deg); }
+  .pause-seal span { font-size: 20px; }
+  .ink-block { position: relative; display: flex; align-items: center; justify-content: center; min-height: 260px; background: var(--ink); overflow: hidden; }
+  .ink-block > .kanji { position: absolute; font-size: 220px; font-weight: 800; color: #15110e; transform: translateY(8px); }
+  .ink-block .seal { position: relative; width: 112px; height: 112px; border-radius: 12px; box-shadow: inset 0 0 0 3px var(--ink), inset 0 0 0 5px var(--red); transform: rotate(-7deg); }
+  .ink-block .seal span { font-size: 42px; }
+
+  /* receipt */
+  .log { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 48px; align-items: center; }
+  .log-head { display: flex; flex-direction: column; gap: 20px; max-width: 520px; }
+  .log-head h2 { font-size: clamp(36px, 4.6vw, 64px); }
+  .log-head p { font-size: 18px; }
+  .receipt { position: relative; display: flex; flex-direction: column; padding: 28px 28px 36px; border-radius: 6px; background: var(--paper); color: var(--ink); font: 14px var(--mono); transform: rotate(1.5deg); box-shadow: 0 30px 60px -30px rgba(0,0,0,.8); }
+  .receipt .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-bottom: 14px; border-bottom: 1px dashed var(--mute); }
+  .receipt .head .kanji { font-size: 22px; }
+  .receipt small { font-size: 12px; color: var(--brown); }
+  .receipt .line { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px dashed var(--paper-3); }
+  .receipt .st { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; white-space: nowrap; }
+  .receipt .st.paid { color: var(--red-ink); }
+  .receipt .st.paid .kanji { font-size: 20px; border: 2px solid var(--red-ink); border-radius: 4px; padding: 2px 4px; transform: rotate(-8deg); }
+  .receipt .st .kanji { font-size: 14px; color: var(--brown); }
+  .receipt .foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 16px; font-size: 12px; color: var(--brown); }
+  .receipt .seal { position: absolute; right: 20px; bottom: -22px; width: 76px; height: 76px; transform: rotate(8deg); opacity: .92; box-shadow: inset 0 0 0 2px var(--paper), inset 0 0 0 4px var(--red); }
+  .receipt .seal span { font-size: 28px; }
+
+  /* cardano */
+  .cardano { position: relative; border-top: 1px solid var(--line); background: var(--ink-2); overflow: hidden; }
+  .cardano-ghost { position: absolute; left: -20px; bottom: -60px; font-size: clamp(200px, 30vw, 420px); font-weight: 800; color: #14110e; pointer-events: none; }
+  .cardano-in { display: flex; flex-direction: column; gap: 56px; }
+  .cardano h2 { max-width: 820px; margin-left: auto; text-align: right; font-size: clamp(38px, 5.4vw, 80px); line-height: .96; }
+  .uses { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; width: 100%; max-width: 960px; margin: 0 auto; }
+  .use { overflow: hidden; }
+  .use-pic { position: relative; height: 200px; border-bottom: 1px solid var(--line); }
+  .use-pic > .kanji { position: absolute; left: 18px; top: 12px; font-size: 26px; color: var(--red); }
+  .use-pic svg { width: 100%; height: 100%; }
+  .use-body { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px 24px; }
+  .soon { flex: none; font: 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--soft); padding: 4px 8px; border: 1px solid var(--line-2); border-radius: 999px; }
+
+  /* closing */
+  .closing { display: flex; flex-direction: column; align-items: center; gap: 32px; text-align: center; padding-top: clamp(96px, 12vw, 180px); padding-bottom: clamp(96px, 12vw, 180px); }
+  .closing .seal { width: 120px; height: 120px; border-radius: 12px; box-shadow: inset 0 0 0 3px var(--ink), inset 0 0 0 6px var(--red); transform: rotate(-7deg); }
+  .closing .seal span { font-size: 46px; }
+  .closing h2 { font-size: clamp(44px, 7vw, 112px); letter-spacing: -.04em; line-height: .94; }
+  .ctas { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+  .cta { display: inline-flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 22px; border: 1px solid var(--paper); border-radius: 10px; font-size: 16px; font-weight: 700; text-decoration: none; transition: background .2s, color .2s; }
+  .cta:hover { background: var(--paper); color: var(--ink); }
+
+  footer { border-top: 1px solid var(--line); }
+  .foot { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 32px; padding-bottom: 32px; font-size: 14px; color: var(--mute); }
+  .foot a { color: var(--mute); text-decoration: none; font-family: var(--mono); }
+  .foot a:hover { color: var(--paper); }
+  .foot span { display: inline-flex; align-items: center; gap: 10px; }
+  .foot .kanji { flex: none; color: var(--red); }
+
+  /* motion */
+  .rise { animation: rise .9s cubic-bezier(.2,.7,.2,1) both; }
+  .d2 { animation-delay: .12s; } .d3 { animation-delay: .24s; }
+  .stamp { animation: stamp .6s cubic-bezier(.3,1.6,.4,1) .7s both; }
+  .grow { animation: grow 1.6s cubic-bezier(.2,.7,.2,1) .9s both; }
+  .ghost { animation: ghost 1.4s cubic-bezier(.2,.7,.2,1) .2s both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+  @keyframes stamp { from { opacity: 0; transform: rotate(-7deg) scale(1.9); } to { opacity: 1; transform: rotate(-7deg) scale(1); } }
+  @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @keyframes ghost { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .rise, .stamp, .grow, .ghost { animation: none; }
+  }
 
   @media (max-width: 1100px) {
-    .page { padding: 0 40px; }
-    h1 { font-size: 64px; }
-    .how { grid-template-columns: 1fr; gap: 40px; }
-    .tiles { grid-template-columns: repeat(3, 1fr); }
-    .rules { grid-template-columns: 1fr; gap: 32px; }
-    .rules h2 { order: 0; text-align: left; }
+    .flow-grid { grid-template-columns: 1fr 1fr; }
+    .flow-grid .allowance { grid-column: span 2; order: -1; }
+    .how { grid-template-columns: 1fr; }
+    .rule-grid { grid-template-columns: 1fr 1fr; }
+    .log { grid-template-columns: 1fr; }
+    .receipt { justify-self: center; width: 100%; max-width: 520px; }
   }
   @media (max-width: 760px) {
-    .page { padding: 0 16px; }
-    .hero { padding: 48px 0 40px; }
-    h1 { font-size: 44px; }
-    .lede { font-size: 18px; }
-    .install { align-self: stretch; font-size: 13px; gap: 10px; padding-left: 12px; }
-    .flow { padding: 32px 20px; }
-    .flow-row { grid-template-columns: 1fr; justify-items: center; gap: 0; }
-    .flow-row .wire { width: 1px; height: 40px; }
-    .flow-row .wire:has(.chip) { height: 56px; }
-    .chip { top: 50%; left: 14px; transform: translateY(-50%); }
-    .vault { width: min(260px, 100%); }
-    .payees { flex-direction: row; }
-    section { padding-top: 80px; }
-    h2 { font-size: 34px; }
-    .steps { grid-template-columns: 1fr 1fr; row-gap: 32px; }
-    .step:nth-child(2) .step-top::after { display: none; }
-    .tiles { grid-template-columns: 1fr 1fr; }
-    .tile { height: 168px; padding: 20px 16px; }
-    .tile:last-child { grid-column: span 2; }
-    .log { font-size: 13px; padding: 18px; }
-    footer { padding-top: 80px; }
-  }
-  @media (max-width: 400px) {
+    .nav nav a:not(.pill) { display: none; }
+    .hero { min-height: 0; }
+    .hero-ghost { opacity: .6; }
+    .hero-seal { display: none; }
+    .install { padding-left: 12px; gap: 8px; font-size: 13px; }
+    .hero .install { align-self: stretch; }
+    .install code { flex: 1; min-width: 0; }
+    .flow-grid { grid-template-columns: 1fr; }
+    .flow-grid .allowance { grid-column: auto; order: 0; }
+    .flow-card { padding: 22px; }
+    .connect-k { padding-right: 0; min-width: 100%; }
+    .connect-i { flex-basis: 100%; padding: 16px 0 16px 20px; }
     .steps { grid-template-columns: 1fr; }
-    .step .step-top::after { display: none; }
+    .rule-grid { grid-template-columns: 1fr; }
+    .uses { grid-template-columns: 1fr; }
+    .cardano h2 { text-align: left; margin-left: 0; }
+    .receipt { padding: 22px 20px 32px; font-size: 13px; transform: none; }
+    .receipt .line { flex-direction: column; align-items: flex-start; gap: 8px; }
   }
 </style>
 </head>
-<body>
-<div class="page">
-  <header>
-    <a class="brand" href="#"><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><path d="M15 3 A13 13 0 0 0 15 29 Z" fill="#9184d9"/><path d="M17 4.6 A11.4 11.4 0 0 1 17 27.4" fill="none" stroke="#e9e9ed" stroke-width="3.5"/></svg>gendo</a>
-    <a class="gh" href="https://github.com/ardey26/gendo"><i class="ph ph-github-logo" aria-hidden="true"></i>GitHub</a>
-  </header>
+<body id="top">
+<svg class="grain" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 0.95  0 0 0 0 0.85  0 0 0 0.6 0"/></filter>
+  <rect width="100%" height="100%" filter="url(#grain)"/>
+</svg>
 
-  <main>
-    <div class="hero">
-      <h1>Budgeted <span style="white-space:nowrap">on-chain</span> accounts for AI agents.</h1>
-      <p class="lede">Owners approve. Agents spend inside an allowance.</p>
-      <div class="install"><code>npx skills add ardey26/gendo</code><button class="copy" type="button">Copy</button></div>
+<header class="wrap nav">
+  <a class="brand" href="#top">
+    <svg aria-hidden="true" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="12" fill="none" stroke="#efe7d8" stroke-width="2"/><path d="M13 1a12 12 0 0 1 0 24z" fill="#e0452b"/></svg>
+    <b>gendo</b><span class="kanji">限度</span>
+  </a>
+  <nav aria-label="Main">
+    <a href="#how">How it works</a>
+    <a href="#rules">Rules</a>
+    <a href="#cardano">Cardano</a>
+    <a class="pill" href="https://github.com/ardey26/gendo">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.9a3.4 3.4 0 0 0-.9-2.6c3.1-.4 6.4-1.6 6.4-7a5.4 5.4 0 0 0-1.5-3.8 5 5 0 0 0-.1-3.7s-1.2-.4-3.9 1.5a13.4 13.4 0 0 0-7 0C6.3 1.2 5.1 1.6 5.1 1.6a5 5 0 0 0-.1 3.7A5.4 5.4 0 0 0 3.5 9.1c0 5.4 3.3 6.6 6.4 7a3.4 3.4 0 0 0-.9 2.6V23"/></svg>
+      GitHub
+    </a>
+  </nav>
+</header>
+
+<main>
+  <section class="wrap hero">
+    <div class="hero-ghost ghost" aria-hidden="true"><span>限度</span></div>
+    <div class="hero-copy">
+      <h1 class="rise">Your agent gets a budget.<br>Never your keys.</h1>
+      <p class="lede rise d2">Owners stamp the rules once. The agent pays on its own inside them. The chain refuses everything else.</p>
+      <div class="install rise d3"><span class="dollar" aria-hidden="true">$</span><code>npx skills add ardey26/gendo</code><button class="copy" type="button">Copy</button></div>
     </div>
+    <div class="seal hero-seal stamp" aria-hidden="true"><span>承認</span></div>
+  </section>
 
-    <figure class="flow" style="margin:0" aria-label="Two of three owners fund a 150 ADA multisig and grant an agent a 25 ADA allowance. The agent pays two approved payees. A 12 ADA payment over the cap is refused.">
-      <div class="flow-row" aria-hidden="true">
-        <div class="node">
-          <div class="owners"><span class="owner on"><i class="ph ph-check"></i></span><span class="owner on"><i class="ph ph-check"></i></span><span class="owner"></span></div>
-          2 of 3 owners
+  <section class="band" aria-labelledby="flow-h">
+    <div class="wrap flow">
+      <h2 id="flow-h">One multisig. One allowance. One agent.</h2>
+      <div class="flow-grid">
+        <div class="card flow-card">
+          <div class="top"><span class="kanji" style="color:var(--red)" aria-hidden="true">所有者</span><span class="mono">2 / 3 signed</span></div>
+          <div class="seals" aria-hidden="true">
+            <div class="seal" style="transform:rotate(-6deg)"><span>印</span></div>
+            <div class="seal" style="transform:rotate(4deg)"><span>印</span></div>
+            <div class="seal empty"></div>
+          </div>
+          <p>Owners hold the vault and sign the allowance, each on their own machine. Any 2 of 3.</p>
         </div>
-        <div class="wire"></div>
-        <div class="vault">
-          <div class="vault-head"><span><i class="ph ph-vault" style="font-size:16px"></i>Multisig</span><span>150 ADA</span></div>
-          <div class="allow">
-            <div class="allow-head"><span>Allowance</span><span><span id="spent">0 ADA</span> / 25</span></div>
-            <div class="meter"><div class="meter-fill" id="fill"></div></div>
+
+        <div class="card flow-card allowance">
+          <span class="kanji bg-kanji" aria-hidden="true">枠</span>
+          <div class="top"><span class="name">billing-agent</span><span class="mono tag">ALLOWANCE</span></div>
+          <div class="amount"><b>7</b><span>/ 25 ADA today</span></div>
+          <div class="meter" aria-hidden="true"><i class="grow"></i></div>
+          <dl class="facts" style="margin:0">
+            <div><dt>cap</dt><dd>5 ADA</dd></div>
+            <div><dt>payees</dt><dd>3 approved</dd></div>
+            <div><dt>expires</dt><dd>30 days</dd></div>
+          </dl>
+        </div>
+
+        <div class="card flow-card">
+          <div class="top"><span class="kanji" aria-hidden="true">代理人</span><span class="mono">agent key</span></div>
+          <div class="pays">
+            <div><span>→ addr1…hosting</span><span>−4 ADA</span></div>
+            <div><span>→ addr1…api</span><span>−3 ADA</span></div>
+            <div class="no"><span>→ addr1…unknown</span><span>refused</span></div>
+          </div>
+          <p>The agent pays alone. The validator checks every output against the allowance.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="connect-rule" aria-label="How the agent connects">
+    <div class="wrap connect">
+      <div class="connect-k"><span class="kanji" aria-hidden="true">接続</span><span class="mono">Plugs in as</span></div>
+      <div class="connect-i"><b>MCP server</b><span>Three tools: <code>get_budget</code>, <code>pay</code>, <code>request_approval</code>. The agent holds no key.</span></div>
+      <div class="connect-i"><b>Skill</b><span>Teaches the agent the rules, and walks owners through setup.</span></div>
+      <div class="connect-i"><b>SDK</b><span>TypeScript, for builders. Everything else is built on it.</span></div>
+    </div>
+  </section>
+
+  <section id="how" class="wrap section how" aria-labelledby="how-h">
+    <div class="how-head">
+      <h2 id="how-h">Four stamps.<br>Then it runs.</h2>
+      <p class="sub">Set once. Checked on every payment.</p>
+    </div>
+    <ol class="steps">
+      <li class="card step">
+        <div class="step-pic" aria-hidden="true">
+          <span class="kanji step-k">設立</span><span class="mono step-n">一</span>
+          <div class="s1">
+            <div class="seal" style="transform:rotate(-6deg)"><span>印</span></div>
+            <div class="seal" style="transform:rotate(5deg)"><span>印</span></div>
+            <div class="seal empty"></div>
+          </div>
+          <div class="step-cap">2 of 3 · threshold met</div>
+        </div>
+        <div class="step-body"><h3>Owners create a vault</h3><p>Any m of n. Each owner keeps their own key.</p></div>
+      </li>
+      <li class="card step">
+        <div class="step-pic" aria-hidden="true">
+          <span class="kanji step-k">付与</span><span class="mono step-n">二</span>
+          <div class="mini">
+            <div class="row"><span>ALLOWANCE</span><span style="color:var(--red)">30d</span></div>
+            <div class="bar"><i style="width:20%"></i><span class="tick" style="left:20%;top:-5px;height:16px"></span></div>
+            <div class="row"><span>cap 5</span><span>day 25</span></div>
+            <div class="chips"><span>hosting</span><span>api</span><span>payroll</span></div>
+          </div>
+          <div class="seal s2-seal"><span>承認</span></div>
+        </div>
+        <div class="step-body"><h3>They grant an allowance</h3><p>A cap per payment, a budget per period, payees, an expiry.</p></div>
+      </li>
+      <li class="card step">
+        <div class="step-pic" aria-hidden="true">
+          <span class="kanji step-k">支払</span><span class="mono step-n">三</span>
+          <div class="s3">
+            <div class="box"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="12" r="4"/><path d="M12 12h9m-3 0v3m-3-3v2"/></svg></div>
+            <div class="arrow"><span class="amt">−4 ADA</span><div class="line"></div><span class="note">no owner online</span></div>
+            <div class="box"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v12H3zM3 11h18M16 15h2"/></svg></div>
+          </div>
+          <div class="step-cap">validator checks every output</div>
+        </div>
+        <div class="step-body"><h3>The agent pays alone</h3><p>Inside the limits, no owner needs to be online.</p></div>
+      </li>
+      <li class="card step">
+        <div class="step-pic" aria-hidden="true">
+          <span class="kanji step-k">承認</span><span class="mono step-n">四</span>
+          <div class="s4">
+            <div class="row"><span>12 ADA</span><span style="color:var(--red)">cap 5</span></div>
+            <div class="over"><span class="in"></span><span class="out"></span><span class="tick"></span></div>
+            <div class="pair">
+              <div class="seal" style="transform:rotate(-8deg)"><span>印</span></div>
+              <div class="seal" style="transform:rotate(6deg)"><span>印</span></div>
+            </div>
           </div>
         </div>
-        <div class="wire"></div>
-        <div class="node"><span class="agent"><i class="ph ph-robot"></i></span>Agent</div>
-        <div class="wire"><span class="chip" id="chip">waiting…</span></div>
-        <div class="payees">
-          <span class="payee"><i class="ph ph-storefront"></i></span>
-          <span class="payee"><i class="ph ph-cloud"></i></span>
-          <span class="payee no"><i class="ph ph-x"></i></span>
+        <div class="step-body"><h3>Over the limit? Owners co-sign</h3><p>The agent asks. The owners approve it from their own machines.</p></div>
+      </li>
+    </ol>
+  </section>
+
+  <section id="rules" class="rules" aria-labelledby="rules-h">
+    <div class="wrap section rules-in">
+      <div class="rules-head">
+        <h2 id="rules-h">Enforced by the chain. Not by a prompt.</h2>
+        <p>A jailbroken agent can want anything it likes. The validator still rejects the transaction.</p>
+      </div>
+      <div class="rule-grid">
+        <div class="rule">
+          <div class="rule-pic" aria-hidden="true">
+            <span class="kanji">上限</span>
+            <div class="r-col">
+              <div class="row"><span>4 ADA</span><span>cap 5</span></div>
+              <div class="track"><i style="width:80%"></i><span class="limit"></span></div>
+              <div class="row"><span>12 ADA</span><span class="refused">refused</span></div>
+              <div class="track"><i class="full" style="width:100%"></i><span class="spill"></span><span class="limit"></span></div>
+            </div>
+          </div>
+          <div class="rule-body"><h3>Per-payment cap</h3><p>No single payment can exceed it, fee included.</p></div>
+        </div>
+
+        <div class="rule">
+          <div class="rule-pic" aria-hidden="true" style="align-items:flex-end">
+            <span class="kanji">予算</span><span class="corner">25 / day</span>
+            <div class="r-bars"><i style="height:40%"></i><i style="height:72%"></i><i style="height:55%"></i><i style="height:100%"></i><i style="height:20%"></i><i style="height:88%"></i><i style="height:48%"></i></div>
+            <div class="r-days">MON · · · · · SUN</div>
+          </div>
+          <div class="rule-body"><h3>Budget per period</h3><p>A day, or any period. Resets with the clock, not with a retry.</p></div>
+        </div>
+
+        <div class="rule">
+          <div class="rule-pic" aria-hidden="true">
+            <span class="kanji">宛先</span>
+            <div class="r-col mono">
+              <div class="addr"><span>addr1…hosting</span><span class="kanji" style="transform:rotate(-8deg)">済</span></div>
+              <div class="addr"><span>addr1…api</span><span class="kanji" style="transform:rotate(6deg)">済</span></div>
+              <div class="addr no"><span>addr1…unknown</span><span class="refused">×</span></div>
+            </div>
+          </div>
+          <div class="rule-body"><h3>Approved payees</h3><p>Unknown address, invalid transaction.</p></div>
+        </div>
+
+        <div class="rule">
+          <div class="rule-pic" aria-hidden="true">
+            <span class="kanji">期限</span>
+            <div class="r-exp">
+              <div class="ring"><div><b>7</b><span>DAYS</span></div></div>
+              <div class="r-col">
+                <span>day 30</span>
+                <span class="refused">allowance void</span>
+                <span>no tx needed</span>
+              </div>
+            </div>
+          </div>
+          <div class="rule-body"><h3>Expiry</h3><p>The allowance dies on schedule.</p></div>
+        </div>
+
+        <div class="rule">
+          <div class="rule-pic" aria-hidden="true" style="overflow:hidden">
+            <span class="kanji">停止</span>
+            <div class="paused">
+              <div><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg></div>
+              <div><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg></div>
+              <div><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg></div>
+              <div><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg></div>
+              <div><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg></div>
+              <div><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg></div>
+            </div>
+            <div class="seal on-paper pause-seal"><span>停止</span></div>
+          </div>
+          <div class="rule-body"><h3>Pause all</h3><p>The owners sign one tx and every allowance stops.</p></div>
+        </div>
+
+        <div class="ink-block" aria-hidden="true">
+          <span class="kanji">限</span>
+          <div class="seal"><span>限度</span></div>
         </div>
       </div>
-    </figure>
+    </div>
+  </section>
 
-    <section class="how" aria-labelledby="how-h">
-      <h2 id="how-h">How it works</h2>
-      <ol class="steps" style="list-style:none;margin:0;padding:0">
-        <li class="step"><div class="step-top"><span class="badge"><i class="ph ph-users-three"></i></span></div><b>Owners create a multisig</b><span>Any 2 of 3 sign</span></li>
-        <li class="step"><div class="step-top"><span class="badge"><i class="ph ph-hand-coins"></i></span></div><b>They grant an allowance</b><span>Caps, payees, expiry</span></li>
-        <li class="step"><div class="step-top"><span class="badge"><i class="ph ph-robot"></i></span></div><b>The agent pays alone</b><span>With its own key</span></li>
-        <li class="step"><div class="step-top"><span class="badge"><i class="ph ph-seal-check"></i></span></div><b>Over the limit?</b><span>Owners co-sign</span></li>
-      </ol>
-    </section>
+  <section class="wrap section log" aria-labelledby="log-h">
+    <div class="log-head">
+      <h2 id="log-h">Your agent knows the rules before it asks.</h2>
+      <p class="sub">Every payment carries an intent id, so a retry never pays twice. Over the limit, it asks the owners.</p>
+    </div>
+    <div class="receipt">
+      <div class="head"><span class="kanji" aria-hidden="true">領収書</span><small>billing-agent · today</small></div>
+      <div class="line"><span>Pay 4 ADA for INV-1001</span><span class="st paid"><span class="kanji" aria-hidden="true">済</span>paid</span></div>
+      <div class="line"><span>Pay 12 ADA for INV-1004</span><span class="st"><span class="kanji" aria-hidden="true">上限超</span>over cap, sent to owners</span></div>
+      <div class="line"><span>Pay 4 ADA for INV-1001</span><span class="st"><span class="kanji" aria-hidden="true">既払</span>already paid</span></div>
+      <div class="foot"><span>spent 4 / 25 ADA</span><span>0 owner signatures needed</span></div>
+      <div class="seal" aria-hidden="true"><span>限度</span></div>
+    </div>
+  </section>
 
-    <section class="enforced" aria-labelledby="enf-h">
-      <h2 id="enf-h">Enforced on-chain.</h2>
-      <div class="tiles">
-        <div class="tile"><div class="pic" aria-hidden="true"><div class="cap"><div class="in"></div><div class="over"></div><div class="line"></div></div></div><b>Per-payment cap</b></div>
-        <div class="tile"><div class="pic bars" aria-hidden="true"><span style="height:40%"></span><span style="height:70%"></span><span style="height:55%"></span><span style="height:78%"></span><span style="height:30%"></span><span style="height:78%"></span><span style="height:20%"></span></div><b>Daily budget</b></div>
-        <div class="tile"><div class="pic dots" aria-hidden="true"><span class="dot"><i class="ph ph-check"></i></span><span class="dot"><i class="ph ph-check"></i></span><span class="dot no"><i class="ph ph-x"></i></span></div><b>Approved payees</b></div>
-        <div class="tile"><div class="pic" aria-hidden="true"><i class="ph ph-calendar-x"></i></div><b>Expiry</b></div>
-        <div class="tile"><div class="pic" aria-hidden="true"><i class="ph ph-pause-circle"></i></div><b>Pause all, one tx</b></div>
+  <section id="cardano" class="cardano" aria-labelledby="cardano-h">
+    <span class="kanji cardano-ghost" aria-hidden="true">自律</span>
+    <div class="wrap section cardano-in">
+      <h2 id="cardano-h">The most active wallets on Cardano won't be human.</h2>
+      <div class="uses">
+        <div class="card use">
+          <div class="use-pic">
+            <span class="kanji" aria-hidden="true">推論</span>
+            <svg role="img" aria-label="An agent sends coins through a torii gate toward a sun, under a dashed ceiling line" viewBox="0 0 300 180" fill="none" stroke="#efe7d8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 150 H282" stroke="#3a332b"/>
+              <path d="M16 28 H284" stroke="#e0452b" stroke-dasharray="5 7" stroke-width="1.5"/>
+              <circle cx="246" cy="90" r="26" fill="#e0452b" stroke="none" opacity=".9"/>
+              <path d="M246 50 v-8 M246 130 v8 M206 90 h-8 M286 90 h-8 M218 62 l-6 -6 M274 118 l6 6 M274 62 l6 -6 M218 118 l-6 6" stroke="#e0452b" stroke-width="1.5"/>
+              <path d="M112 150 V58 M176 150 V58" stroke-width="5"/>
+              <path d="M94 50 Q144 40 194 50" stroke="#e0452b" stroke-width="7"/>
+              <path d="M104 68 H184 M144 68 V51" stroke-width="4"/>
+              <rect x="34" y="96" width="36" height="34" rx="6"/>
+              <path d="M52 96 v-10 M46 86 h12 M44 110 h4 M60 110 h4 M42 130 v16 M62 130 v16"/>
+              <circle cx="52" cy="84" r="3" fill="#e0452b" stroke="none"/>
+              <ellipse cx="86" cy="118" rx="9" ry="5.5" fill="#e0452b" stroke="none"/>
+              <ellipse cx="118" cy="104" rx="9" ry="5.5" fill="#e0452b" stroke="none"/>
+              <ellipse cx="150" cy="96" rx="9" ry="5.5" fill="#e0452b" stroke="none"/>
+              <ellipse cx="184" cy="94" rx="9" ry="5.5" fill="#e0452b" stroke="none" opacity=".7"/>
+            </svg>
+          </div>
+          <div class="use-body"><h3>Pays its own inference bills</h3></div>
+        </div>
+
+        <div class="card use">
+          <div class="use-pic">
+            <span class="kanji" aria-hidden="true">経理</span>
+            <svg role="img" aria-label="A storehouse with a sealed door sends out a line of stamped invoice scrolls" viewBox="0 0 300 180" fill="none" stroke="#efe7d8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 150 H282" stroke="#3a332b"/>
+              <path d="M40 150 V76 H136 V150" stroke-width="2.5"/>
+              <path d="M30 78 L88 36 L146 78" stroke-width="3"/>
+              <path d="M88 36 V26" stroke="#e0452b" stroke-width="3"/>
+              <path d="M40 96 H136 M40 116 H136 M40 136 H136" stroke="#3a332b"/>
+              <rect x="74" y="104" width="28" height="46" rx="2"/>
+              <rect x="80" y="112" width="16" height="16" rx="2" fill="#e0452b" stroke="none" transform="rotate(-8 88 120)"/>
+              <path d="M148 128 H276" stroke-dasharray="3 6" stroke-width="1.5"/>
+              <rect x="160" y="112" width="26" height="32" rx="3"/><path d="M166 122 h14 M166 130 h10" stroke="#3a332b"/><circle cx="180" cy="137" r="4" fill="#e0452b" stroke="none"/>
+              <rect x="202" y="112" width="26" height="32" rx="3"/><path d="M208 122 h14 M208 130 h10" stroke="#3a332b"/><circle cx="222" cy="137" r="4" fill="#e0452b" stroke="none"/>
+              <rect x="244" y="112" width="26" height="32" rx="3" stroke-dasharray="3 3" stroke="#8f8578"/>
+              <path d="M172 64 h88 M180 56 v16 M196 56 v16 M212 56 v16 M228 56 v16 M244 56 v16" stroke="#3a332b"/>
+              <circle cx="188" cy="64" r="4" fill="#e0452b" stroke="none"/><circle cx="220" cy="64" r="4" fill="#e0452b" stroke="none"/>
+            </svg>
+          </div>
+          <div class="use-body"><h3>Pays a team's invoices</h3></div>
+        </div>
+
+        <div class="card use">
+          <div class="use-pic">
+            <span class="kanji" aria-hidden="true">報酬</span>
+            <svg role="img" aria-label="A central crest sends coins along spokes to five contributors arranged around it" viewBox="0 0 300 180" fill="none" stroke="#efe7d8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M150 90 L62 48 M150 90 L238 48 M150 90 L46 118 M150 90 L254 118 M150 90 L150 158" stroke="#3a332b" stroke-dasharray="3 6"/>
+              <circle cx="150" cy="90" r="26" fill="#0d0b09" stroke-width="2.5"/>
+              <circle cx="150" cy="90" r="16" fill="#e0452b" stroke="none"/>
+              <circle cx="150" cy="90" r="6" fill="#0d0b09" stroke="none"/>
+              <ellipse cx="106" cy="69" rx="8" ry="5" fill="#e0452b" stroke="none"/>
+              <ellipse cx="194" cy="69" rx="8" ry="5" fill="#e0452b" stroke="none"/>
+              <ellipse cx="98" cy="104" rx="8" ry="5" fill="#e0452b" stroke="none"/>
+              <ellipse cx="202" cy="104" rx="8" ry="5" fill="#e0452b" stroke="none"/>
+              <ellipse cx="150" cy="124" rx="8" ry="5" fill="#e0452b" stroke="none"/>
+              <circle cx="62" cy="36" r="9"/><path d="M46 60 q16 -14 32 0"/>
+              <circle cx="238" cy="36" r="9"/><path d="M222 60 q16 -14 32 0"/>
+              <circle cx="40" cy="108" r="9"/><path d="M24 132 q16 -14 32 0"/>
+              <circle cx="260" cy="108" r="9"/><path d="M244 132 q16 -14 32 0"/>
+              <circle cx="150" cy="156" r="9"/><path d="M134 180 q16 -14 32 0"/>
+            </svg>
+          </div>
+          <div class="use-body"><h3>Pays out bounties</h3></div>
+        </div>
+
+        <div class="card use">
+          <div class="use-pic">
+            <span class="kanji" aria-hidden="true">運用</span>
+            <svg role="img" aria-label="A kite flies high on a string anchored to a vermilion seal on the ground" viewBox="0 0 300 180" fill="none" stroke="#efe7d8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 150 H282" stroke="#3a332b"/>
+              <path d="M70 52 h44 M56 70 h28 M84 88 h36" stroke="#3a332b"/>
+              <path d="M52 134 C 110 130, 170 100, 214 56" stroke-dasharray="3 6" stroke-width="1.5"/>
+              <polygon points="214,18 252,56 214,110 176,56" stroke-width="2.5"/>
+              <path d="M214 18 V110 M176 56 H252"/>
+              <circle cx="214" cy="56" r="11" fill="#e0452b" stroke="none"/>
+              <path d="M214 110 q-12 14 2 26 q-12 12 2 24" stroke="#e0452b"/>
+              <path d="M216 120 l10 2 M212 140 l-10 2 M218 158 l10 2" stroke="#e0452b"/>
+              <g transform="rotate(-8 44 134)"><rect x="30" y="120" width="28" height="28" rx="4" fill="#e0452b" stroke="none"/><rect x="34" y="124" width="20" height="20" rx="2" stroke="#0d0b09" stroke-width="1.5"/></g>
+            </svg>
+          </div>
+          <div class="use-body"><h3>Swaps on a leash</h3><span class="soon">Roadmap</span></div>
+        </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section class="rules" aria-labelledby="rules-h">
-      <h2 id="rules-h">Your agent knows the rules.</h2>
-      <div class="log">
-        <div><span>Pay 4 ADA for INV-1001</span><span class="paid"><i class="ph ph-check-circle" aria-hidden="true"></i>paid</span></div>
-        <div><span>Pay 12 ADA for INV-1004</span><span class="refused"><i class="ph ph-x-circle" aria-hidden="true"></i>over cap</span></div>
-        <div><span>Pay 4 ADA for INV-1001</span><span class="dup"><i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>already paid</span></div>
-      </div>
-    </section>
-  </main>
+  <section class="wrap closing" aria-labelledby="end-h">
+    <div class="seal" aria-hidden="true"><span>限度</span></div>
+    <h2 id="end-h">Stamp the rules.<br>Let it run.</h2>
+    <div class="ctas">
+      <div class="install"><span class="dollar" aria-hidden="true">$</span><code>npx skills add ardey26/gendo</code><button class="copy" type="button">Copy</button></div>
+      <a class="cta" href="https://github.com/ardey26/gendo">GitHub <span aria-hidden="true">↗</span></a>
+    </div>
+  </section>
+</main>
 
-  <footer>
+<footer>
+  <div class="wrap foot">
     <a href="https://github.com/ardey26/gendo">github.com/ardey26/gendo</a>
-  </footer>
-</div>
-<script>
-  const btn = document.querySelector(".copy");
-  btn.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText("npx skills add ardey26/gendo"); } catch {}
-    btn.textContent = "Copied";
-    clearTimeout(btn.t);
-    btn.t = setTimeout(() => { btn.textContent = "Copy"; }, 1600);
-  });
+    <span><span class="kanji" aria-hidden="true">限度</span>Built on Cardano. Enforced by a validator, not by trust.</span>
+  </div>
+</footer>
 
-  // Agent pays 4, 8, 9 ADA; the 12 ADA payment is over the 10 ADA per-payment cap and refused.
-  const spentBy = [0, 4, 12, 21, 21];
-  const chips = [["waiting…", ""], ["−4 ADA", "ok"], ["−8 ADA", "ok"], ["−9 ADA", "ok"], ["−12 ADA refused", "no"]];
-  const fill = document.getElementById("fill"), spent = document.getElementById("spent"), chip = document.getElementById("chip");
-  function render(shown) {
-    fill.style.width = (spentBy[shown] / 25 * 100) + "%";
-    spent.textContent = spentBy[shown] + " ADA";
-    chip.textContent = chips[shown][0];
-    chip.className = "chip " + chips[shown][1];
-  }
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    render(4);
-  } else {
-    let step = 0;
-    render(0);
-    setInterval(() => { step = (step + 1) % 7; render(Math.min(step, 4)); }, 1100);
-  }
+<script>
+  document.querySelectorAll(".copy").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText("npx skills add ardey26/gendo"); } catch {}
+      btn.textContent = "Copied";
+      clearTimeout(btn.t);
+      btn.t = setTimeout(() => { btn.textContent = "Copy"; }, 1600);
+    });
+  });
 </script>
 </body>
 </html>
