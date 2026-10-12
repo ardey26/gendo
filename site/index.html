@@ -330,13 +330,13 @@
 
 <main>
   <section class="wrap hero">
-    <div class="hero-ghost ghost" aria-hidden="true"><span>限度</span></div>
+    <div class="hero-ghost ghost" aria-hidden="true"><span data-parallax="0.1">限度</span></div>
     <div class="hero-copy">
       <h1 class="rise">Your agent gets a budget.<br>Never your keys.</h1>
       <p class="lede rise d2">Owners stamp the rules once. The agent pays on its own inside them. The chain refuses everything else.</p>
       <div class="install rise d3"><span class="dollar" aria-hidden="true">$</span><code>npx skills add ardey26/gendo</code><button class="copy" type="button">Copy</button></div>
     </div>
-    <div class="seal hero-seal stamp" aria-hidden="true"><span>承認</span></div>
+    <div class="seal hero-seal stamp" aria-hidden="true" data-parallax="-0.06"><span>承認</span></div>
   </section>
 
   <section class="band" aria-labelledby="flow-h">
@@ -354,7 +354,7 @@
         </div>
 
         <div class="card flow-card allowance">
-          <span class="kanji bg-kanji" aria-hidden="true">枠</span>
+          <span class="kanji bg-kanji" aria-hidden="true" data-parallax="0.08">枠</span>
           <div class="top"><span class="name">billing-agent</span><span class="mono tag">ALLOWANCE</span></div>
           <div class="amount"><b>7</b><span>/ 25 ADA today</span></div>
           <div class="meter" aria-hidden="true"><i class="grow"></i></div>
@@ -520,7 +520,7 @@
         </div>
 
         <div class="ink-block" aria-hidden="true">
-          <span class="kanji">限</span>
+          <span class="kanji" data-parallax="0.06">限</span>
           <div class="seal"><span>限度</span></div>
         </div>
       </div>
@@ -543,7 +543,7 @@
   </section>
 
   <section id="cardano" class="cardano" aria-labelledby="cardano-h">
-    <span class="kanji cardano-ghost" aria-hidden="true">自律</span>
+    <span class="kanji cardano-ghost" aria-hidden="true" data-parallax="0.07">自律</span>
     <div class="wrap section cardano-in">
       <h2 id="cardano-h">The most active wallets on Cardano won't be human.</h2>
       <div class="uses">
@@ -662,6 +662,25 @@
       btn.t = setTimeout(() => { btn.textContent = "Copy"; }, 1600);
     });
   });
+  // Parallax: decorative layers drift against the scroll. A positive speed lags behind, a negative one leads.
+  // Uses the `translate` property so it composes with each layer's own rotate and entrance animation.
+  const layers = [...document.querySelectorAll("[data-parallax]")];
+  if (layers.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    let queued = false;
+    const update = () => {
+      queued = false;
+      const mid = innerHeight / 2;
+      for (const el of layers) {
+        const r = el.parentElement.getBoundingClientRect();
+        if (r.bottom < -200 || r.top > innerHeight + 200) continue;
+        el.style.translate = "0 " + ((mid - (r.top + r.height / 2)) * el.dataset.parallax).toFixed(1) + "px";
+      }
+    };
+    const queue = () => { if (!queued) { queued = true; requestAnimationFrame(update); } };
+    addEventListener("scroll", queue, { passive: true });
+    addEventListener("resize", queue);
+    update();
+  }
 </script>
 </body>
 </html>
