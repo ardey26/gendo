@@ -1,7 +1,6 @@
 // Vault identity: the compiled script with its seed parameter applied, plus
 // the derived address, policy and token names. Everything here is a pure
 // function of (blueprint, seed), so rotating owners can never change it.
-import { readFileSync } from "node:fs";
 import { blake2b } from "@noble/hashes/blake2b";
 import {
   Data,
@@ -13,9 +12,11 @@ import {
   type Network,
   type Script,
 } from "@lucid-evolution/lucid";
+import blueprint from "../../../onchain/plutus.json" with { type: "json" };
+import { fromHex, toHex, utf8ToHex } from "./bytes.js";
 import { outRefToData, type Hex } from "./data.js";
 
-export const CONFIG_TOKEN_NAME = Buffer.from("config").toString("hex");
+export const CONFIG_TOKEN_NAME = utf8ToHex("config");
 
 export type OutRef = { txHash: Hex; outputIndex: number };
 
@@ -28,13 +29,16 @@ export type Vault = {
   configUnit: string;
 };
 
-const BLUEPRINT_URL = new URL("../../onchain/plutus.json", import.meta.url);
+// The compiled validators, bundled with the code (onchain/plutus.json), so the
+// same vault identity is derived in Node and in the browser.
+function compiled(title: string): string {
+  const v = blueprint.validators.find((x: { title: string }) => x.title === title);
+  if (!v) throw new Error(`${title} not found in blueprint`);
+  return v.compiledCode;
+}
 
-export function loadCompiledCode(path: URL | string = BLUEPRINT_URL): string {
-  const bp = JSON.parse(readFileSync(path, "utf8"));
-  const v = bp.validators.find((x: { title: string }) => x.title === "vault.vault.spend");
-  if (!v) throw new Error("vault.vault.spend not found in blueprint");
-  return v.compiledCode as string;
+export function loadCompiledCode(): string {
+  return compiled("vault.vault.spend");
 }
 
 /** Refuse mainnet outright (edge I5). This MVP is preprod-only. */
@@ -59,18 +63,14 @@ export function makeVault(network: Network, seed: OutRef, compiledCode = loadCom
 }
 
 /** Always-fail address where the vault's reference script is parked (edge I3). */
-export function refHolderAddress(network: Network, path: URL | string = BLUEPRINT_URL): string {
-  const bp = JSON.parse(readFileSync(path, "utf8"));
-  const v = bp.validators.find((x: { title: string }) => x.title === "ref_holder.ref_holder.else");
-  if (!v) throw new Error("ref_holder not found in blueprint");
-  return validatorToAddress(network, { type: "PlutusV3", script: applyDoubleCborEncoding(v.compiledCode) });
+export function refHolderAddress(network: Network): string {
+  return validatorToAddress(network, { type: "PlutusV3", script: applyDoubleCborEncoding(compiled("ref_holder.ref_holder.else")) });
 }
 
 /** blake2b_224(cbor(OutputReference)), as `allowance.allowance_name`. */
 export function allowanceName(ref: OutRef): Hex {
   const cbor = Data.to(outRefToData(ref.txHash, ref.outputIndex));
-  return Buffer.from(blake2b(Buffer.from(cbor, "hex"), { dkLen: 28 })).toString("hex");
+  return toHex(blake2b(fromHex(cbor), { dkLen: 28 }));
 }
 
-export const blake2b256 = (bytes: Uint8Array): Hex =>
-  Buffer.from(blake2b(bytes, { dkLen: 32 })).toString("hex");
+export const blake2b256 = (bytes: Uint8Array): Hex => toHex(blake2b(bytes, { dkLen: 32 }));

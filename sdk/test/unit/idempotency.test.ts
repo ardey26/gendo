@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withRetries } from "../../src/provider.js";
+import { withRetries } from "../../src/core/provider.js";
 import {
   AlreadyPaid,
   MemoryJournal,
@@ -8,7 +8,7 @@ import {
   txFate,
   type ChainQuery,
   type TxFacts,
-} from "../../src/idempotency.js";
+} from "../../src/core/idempotency.js";
 
 const T: TxFacts = { hash: "aa".repeat(32), inputs: [{ txHash: "bb".repeat(32), index: 0 }], ttlMs: 1_000_000 };
 

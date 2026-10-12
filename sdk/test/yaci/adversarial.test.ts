@@ -3,10 +3,10 @@
 // spend and asserts the node rejects it, and for what reason.
 import { beforeAll, describe, expect, it } from "vitest";
 import { CML, Data, mintingPolicyToId, scriptFromNative, type UTxO } from "@lucid-evolution/lucid";
-import { buildAgentSpend } from "../../src/agent.js";
-import { awaitIndexed } from "../../src/chain.js";
-import { allowanceToData, configToData, mintRedeemer, spendRedeemer } from "../../src/data.js";
-import * as owner from "../../src/owner.js";
+import { buildAgentSpend } from "../../src/core/agent.js";
+import { awaitIndexed } from "../../src/core/chain.js";
+import { allowanceToData, configToData, mintRedeemer, spendRedeemer } from "../../src/core/data.js";
+import * as owner from "../../src/core/owner.js";
 import { SCRIPT_FAILURE, attack, buildAttack, resign, setPayee, type Ctx } from "./attacker.js";
 import {
   ADA,
@@ -388,7 +388,7 @@ describe("pause, races, malformed datums", () => {
     const spend = await buildAttack(c);
     w.lucid.selectWallet.fromPrivateKey(w.a.privateKey);
     const revoke = await owner.revokeAllowance(w.lucid, w.vault, c.config, c.allowance, [w.a.pkh, w.c.pkh]);
-    const { witness, assemble } = await import("../../src/cosign.js");
+    const { witness, assemble } = await import("../../src/core/cosign.js");
     const rc = revoke.toCBOR();
     const signedRevoke = (await assemble(w.lucid, rc, [await witness(w.lucid, rc, w.a.privateKey), await witness(w.lucid, rc, w.c.privateKey)])).toCBOR();
     const [r1, r2] = await Promise.all([submitRaw(spend), submitRaw(signedRevoke)]);
@@ -397,7 +397,7 @@ describe("pause, races, malformed datums", () => {
 
   it("U6 owner-created allowance with a garbage datum: agent can't spend, owners reclaim", async () => {
     const { lucid, vault, a, b } = w;
-    const { allowanceName } = await import("../../src/vault.js");
+    const { allowanceName } = await import("../../src/core/vault.js");
     let u = "";
     // Built as a closure so a stale wallet view can be rebuilt (fate-checked).
     await signSubmit(
@@ -458,4 +458,3 @@ describe("pause, races, malformed datums", () => {
     await waitForConfig(lucid, vault, await signSubmit(lucid, rotate([a.pkh, b.pkh, cc.pkh]), [a, b]));
   });
 });
-

@@ -8,7 +8,7 @@ import {
   type TxSignBuilder,
   type UTxO,
 } from "@lucid-evolution/lucid";
-import { assemble, witness } from "../src/cosign.js";
+import { assemble, witness } from "../src/core/cosign.js";
 
 export const ADA = 1_000_000n;
 

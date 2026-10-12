@@ -3,7 +3,7 @@
 // layer adds what the chain cannot: rate limits, a local budget, short TTLs,
 // and a second opinion on destinations from a config the LLM cannot edit.
 import { CML, type Assets } from "@lucid-evolution/lucid";
-import { add, valueToAssets } from "../assets.js";
+import { add, valueToAssets } from "../../core/assets.js";
 
 export type SignerPolicy = {
   agentKeyHash: string;

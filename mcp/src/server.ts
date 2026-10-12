@@ -10,7 +10,7 @@ import { parseArgs } from "node:util";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { budget, openSession, pay, requestApproval } from "../../sdk/src/session.js";
+import { budget, openSession, pay, requestApproval } from "../../sdk/src/node/session.js";
 
 // stdout carries the protocol; anything else printed there would corrupt it.
 console.log = (...a: unknown[]) => console.error(...a);

@@ -13,11 +13,11 @@ import {
   type TxBuilder,
   type UTxO,
 } from "@lucid-evolution/lucid";
-import { add, sub } from "../../src/assets.js";
-import type { AllowanceUtxo, ConfigUtxo } from "../../src/chain.js";
-import { allowanceToData, spendRedeemer, type AllowanceDatum } from "../../src/data.js";
-import { windowFor } from "../../src/limits.js";
-import type { Vault } from "../../src/vault.js";
+import { add, sub } from "../../src/core/assets.js";
+import type { AllowanceUtxo, ConfigUtxo } from "../../src/core/chain.js";
+import { allowanceToData, spendRedeemer, type AllowanceDatum } from "../../src/core/data.js";
+import { windowFor } from "../../src/core/limits.js";
+import type { Vault } from "../../src/core/vault.js";
 import { ADA, TARGET, submitRaw, tipMs, type Key } from "./world.js";
 
 // Per redeemer; two redeemers must still fit the 16.5M mem tx limit.

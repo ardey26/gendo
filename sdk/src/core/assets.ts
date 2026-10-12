@@ -1,4 +1,5 @@
 import { CML, calculateMinLovelaceFromUTxO, type Assets, type LucidEvolution } from "@lucid-evolution/lucid";
+import { toHex } from "./bytes.js";
 
 export function add(...xs: Assets[]): Assets {
   const out: Assets = {};
@@ -36,7 +37,7 @@ export const fmt = (a: Assets) =>
 
 /** Policy id + raw asset-name hex. Not `to_cbor_hex().slice(2)`: that keeps a length byte for names of 24+ bytes. */
 export const unitOfAsset = (policy: CML.ScriptHash, name: CML.AssetName) =>
-  policy.to_hex() + Buffer.from(name.to_raw_bytes()).toString("hex");
+  policy.to_hex() + toHex(name.to_raw_bytes());
 
 type AssetMap = {
   keys(): CML.PolicyIdList;

@@ -3,8 +3,8 @@
 // crash or restart can never forget a signature it handed out.
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { Assets } from "@lucid-evolution/lucid";
-import { fmt } from "../assets.js";
-import type { TxFacts } from "../idempotency.js";
+import { fmt } from "../../core/assets.js";
+import type { TxFacts } from "../../core/idempotency.js";
 
 export type IntentRecord = TxFacts & { at: number };
 

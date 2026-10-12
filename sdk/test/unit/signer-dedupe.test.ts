@@ -2,8 +2,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkIntent } from "../../src/signer/dedupe.js";
-import { loadState, saveState } from "../../src/signer/state.js";
+import { checkIntent } from "../../src/node/signer/dedupe.js";
+import { loadState, saveState } from "../../src/node/signer/state.js";
 
 const prev = { hash: "aa".repeat(32), inputs: [{ txHash: "bb".repeat(32), index: 0 }], ttlMs: 1000, at: 0 };
 

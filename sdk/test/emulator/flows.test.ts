@@ -4,18 +4,18 @@
 // re-run scripts; adversarial replays live in test/yaci.)
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Emulator, LucidEvolution } from "@lucid-evolution/lucid";
-import { buildAgentSpend, buildOverLimitSpend } from "../../src/agent.js";
-import { listAllowances, readAllowance, readConfig, treasuryUtxos } from "../../src/chain.js";
-import { assemble, describeTx } from "../../src/cosign.js";
-import { requestWitness } from "../../src/signer/client.js";
-import { startSigner } from "../../src/signer/server.js";
+import { buildAgentSpend, buildOverLimitSpend } from "../../src/core/agent.js";
+import { listAllowances, readAllowance, readConfig, treasuryUtxos } from "../../src/core/chain.js";
+import { assemble, describeTx } from "../../src/core/cosign.js";
+import { requestWitness } from "../../src/node/signer/client.js";
+import { startSigner } from "../../src/node/signer/server.js";
 import { SLOT_CONFIG_NETWORK } from "@lucid-evolution/lucid";
 import { mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LimitError } from "../../src/limits.js";
-import * as owner from "../../src/owner.js";
-import type { Vault } from "../../src/vault.js";
+import { LimitError } from "../../src/core/limits.js";
+import * as owner from "../../src/core/owner.js";
+import type { Vault } from "../../src/core/vault.js";
 import { ADA, collateralOf, emulatorWorld, signAndSubmit, type Party } from "../helpers.js";
 
 let w: Awaited<ReturnType<typeof emulatorWorld>>;

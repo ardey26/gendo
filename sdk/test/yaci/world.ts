@@ -17,12 +17,12 @@ import {
   type TxSignBuilder,
   type UTxO,
 } from "@lucid-evolution/lucid";
-import { awaitSettled, readAllowance, readConfig, treasuryUtxos } from "../../src/chain.js";
-import { assemble, witness } from "../../src/cosign.js";
-import { NeverLands, blockfrostQuery, submitResolving } from "../../src/idempotency.js";
-import * as owner from "../../src/owner.js";
-import { connect as sdkConnect, providerFromEnv } from "../../src/provider.js";
-import type { Vault } from "../../src/vault.js";
+import { awaitSettled, readAllowance, readConfig, treasuryUtxos } from "../../src/core/chain.js";
+import { assemble, witness } from "../../src/core/cosign.js";
+import { NeverLands, blockfrostQuery, submitResolving } from "../../src/core/idempotency.js";
+import * as owner from "../../src/core/owner.js";
+import { connect as sdkConnect, providerFromEnv } from "../../src/core/provider.js";
+import type { Vault } from "../../src/core/vault.js";
 import type { Network } from "@lucid-evolution/lucid";
 
 export const TARGET: "yaci" | "preprod" = process.env.ADV_TARGET === "preprod" ? "preprod" : "yaci";

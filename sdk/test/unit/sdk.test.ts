@@ -8,10 +8,10 @@ import {
   configFromData,
   configToData,
   type AllowanceDatum,
-} from "../../src/data.js";
-import { canonicalJson, intentHash, intentMetadata, verifyIntent, type Intent } from "../../src/intent.js";
-import { floorDiv, nextAllowance, wellFormedProblems, LimitError } from "../../src/limits.js";
-import { evaluate, type SignerPolicy } from "../../src/signer/policy.js";
+} from "../../src/core/data.js";
+import { canonicalJson, intentHash, intentMetadata, verifyIntent, type Intent } from "../../src/core/intent.js";
+import { floorDiv, nextAllowance, wellFormedProblems, LimitError } from "../../src/core/limits.js";
+import { evaluate, type SignerPolicy } from "../../src/node/signer/policy.js";
 
 const k = (n: number) => n.toString(16).padStart(2, "0").repeat(28);
 
@@ -197,3 +197,4 @@ describe("signer policy", () => {
     });
   });
 });
+

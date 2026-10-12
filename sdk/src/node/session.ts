@@ -5,18 +5,19 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { credentialToAddress, type Assets, type LucidEvolution, type Network, type UTxO } from "@lucid-evolution/lucid";
-import { buildOverLimitSpend } from "./agent.js";
-import { fromPlutusAddress } from "./address.js";
-import { readAllowance, readConfig } from "./chain.js";
-import { describeTx } from "./cosign.js";
-import { AlreadyPaid, assertNotPaid, blockfrostQuery, FileJournal, type ChainQuery, type IntentJournal } from "./idempotency.js";
-import { INTENT_LABEL } from "./intent.js";
-import { floorDiv, unitOf } from "./limits.js";
-import { offlineTtlMs } from "./owner.js";
-import { payOnce } from "./pay.js";
-import { connect, providerFromEnv } from "./provider.js";
+import { buildOverLimitSpend } from "../core/agent.js";
+import { fromPlutusAddress } from "../core/address.js";
+import { readAllowance, readConfig } from "../core/chain.js";
+import { describeTx } from "../core/cosign.js";
+import { AlreadyPaid, assertNotPaid, blockfrostQuery, type ChainQuery, type IntentJournal } from "../core/idempotency.js";
+import { FileJournal } from "./journal.js";
+import { INTENT_LABEL } from "../core/intent.js";
+import { floorDiv, unitOf } from "../core/limits.js";
+import { offlineTtlMs } from "../core/owner.js";
+import { payOnce } from "../core/pay.js";
+import { connect, providerFromEnv } from "../core/provider.js";
 import { requestWitness } from "./signer/client.js";
-import { makeVault, type Vault } from "./vault.js";
+import { makeVault, type Vault } from "../core/vault.js";
 
 export type AgentSession = {
   lucid: LucidEvolution;

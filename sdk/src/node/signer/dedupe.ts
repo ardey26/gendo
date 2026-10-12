@@ -9,7 +9,7 @@
 //   different body, T can never land    -> sign (this is the legitimate rebuild)
 // A compromised agent can always pick a fresh id; the on-chain caps bound that.
 import { CML } from "@lucid-evolution/lucid";
-import type { Fate, TxFacts } from "../idempotency.js";
+import type { Fate, TxFacts } from "../../core/idempotency.js";
 import type { IntentRecord } from "./state.js";
 
 export type DedupeDecision = { ok: true } | { ok: false; reason: string };
