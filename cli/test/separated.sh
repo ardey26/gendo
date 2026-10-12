@@ -63,7 +63,15 @@ echo "== agent pays through the socket"
 as $AG agent spend "$UNIT" --to "$PAYEE" --ada 3 --intent-id INV-1 --signer-socket $SOCK | jq -e .submitted >/dev/null || fail "agent spend"
 [[ $(received "$PAYEE" 3000000) == 1 ]] && ok "payee got 3 ADA" || fail "payment missing"
 
-echo "== escalation: agent prepares with owner hashes; signer home + owners witness"
+echo "== a stale escalation: the agent paid something else first"
+as $AG agent overlimit "$UNIT" --to "$PAYEE" --ada 15 --intent-id INV-2 --cosigners $PA,$PB --out $T/ol.cbor >/dev/null
+[[ $(as $OA tx describe $T/ol.cbor | jq -r .status.state) == submittable ]] || fail "fresh escalation not submittable"
+as $AG agent spend "$UNIT" --to "$PAYEE" --ada 2 --intent-id INV-1b --signer-socket $SOCK | jq -e .submitted >/dev/null || fail "second agent spend"
+[[ $(as $OA tx describe $T/ol.cbor | jq -r .status.state) == dead ]] || fail "owners not told the escalation is dead"
+if as $OA tx witness $T/ol.cbor --key me --out $T/dead.wit 2>/dev/null; then fail "owner signed a dead tx"; fi
+ok "owners see the stale escalation as dead and can't sign it"
+
+echo "== escalation: agent re-files with the same intent id; signer home + owners witness"
 as $AG agent overlimit "$UNIT" --to "$PAYEE" --ada 15 --intent-id INV-2 --cosigners $PA,$PB --out $T/ol.cbor >/dev/null
 as $SIG tx witness $T/ol.cbor --key agent --out $T/agent.wit >/dev/null
 as $OA tx witness $T/ol.cbor --key me --out $T/a2.wit >/dev/null
@@ -71,6 +79,8 @@ as $OB tx describe $T/ol.cbor | jq -e '.intent.id == "INV-2"' >/dev/null || fail
 as $OB tx witness $T/ol.cbor --key me --out $T/b2.wit >/dev/null
 as $OA tx assemble $T/ol.cbor $T/agent.wit $T/a2.wit $T/b2.wit >/dev/null
 [[ $(received "$PAYEE" 15000000) == 1 ]] && ok "over-limit 15 ADA co-signed across homes" || fail "co-signed payment missing"
+as $OB tx assemble $T/ol.cbor $T/agent.wit $T/a2.wit $T/b2.wit | jq -e .alreadyLanded >/dev/null || fail "re-assembling a landed tx"
+ok "assembling again reports it already landed"
 
 echo "== pause built by B, signed by A and B"
 as $OB config set --pause --propose me --signers $PA,$PB --out $T/pause.cbor >/dev/null

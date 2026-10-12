@@ -17,6 +17,7 @@ import {
   NeverLands,
   assertNotPaid,
   blockfrostQuery,
+  txFacts,
   payOnce,
   submitResolving,
   connect,
@@ -120,6 +121,41 @@ async function describe(lucid: LucidEvolution, cbor: string) {
 /** When an unsigned tx stops being submittable: signers must finish before this. */
 const expiresAt = (lucid: LucidEvolution, ttlSlot?: string) =>
   ttlSlot === undefined ? undefined : new Date(lucid.slotToUnixTime(Number(ttlSlot))).toISOString();
+
+/**
+ * Can this tx still land? Checked before anyone spends a signature on it. An
+ * escalation is built on the allowance's current UTxO, so any other payment
+ * the agent makes from that allowance before submission kills it.
+ */
+async function liveness(lucid: LucidEvolution, cbor: string) {
+  const facts = txFacts(lucid, cbor);
+  const q = chainQuery();
+  const expires = new Date(facts.ttlMs).toISOString();
+  if (await q.txExists(facts.hash)) return { state: "landed" as const, reason: `already on-chain as ${facts.hash}` };
+  for (const i of facts.inputs) {
+    let by = await q.spenderOf(i.txHash, i.index);
+    if (by === facts.hash) return { state: "landed" as const, reason: `already on-chain as ${facts.hash}` };
+    // Providers without a spender index: an input missing from its address's unspent set is gone.
+    // (A lookup by reference returns the output even after it was spent.)
+    if (by === undefined) {
+      const [o] = await lucid.utxosByOutRef([{ txHash: i.txHash, outputIndex: i.index }]);
+      if (o && !(await lucid.utxosAt(o.address)).some((u) => u.txHash === i.txHash && u.outputIndex === i.index)) by = "another tx";
+    }
+    if (typeof by === "string")
+      return {
+        state: "dead" as const,
+        reason: `its input ${i.txHash}#${i.index} was spent by ${by === "another tx" ? by : `tx ${by}`} (for an escalation: the agent made another payment). Ask whoever built it to build it again, then sign the new file`,
+      };
+  }
+  if (Date.now() >= facts.ttlMs) return { state: "dead" as const, reason: `it expired at ${expires}. Build it again with a longer --ttl` };
+  return { state: "submittable" as const, expiresAt: expires };
+}
+
+/** Refuse to sign or submit a tx that can't land, with the reason. */
+async function requireLive(lucid: LucidEvolution, cbor: string) {
+  const l = await liveness(lucid, cbor);
+  if (l.state !== "submittable") die(`not signing: this tx is ${l.state}: ${l.reason}`);
+}
 
 async function refScriptOf(lucid: LucidEvolution) {
   const s = loadState();
@@ -518,18 +554,27 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
     const file = v.out ?? die("--out tx.cbor required (owners co-sign offline)");
     writeFileSync(file, built.tx.toCBOR());
     const summary = cosign.describeTx(built.tx.toCBOR());
-    out({ unsigned: file, hash: built.tx.toHash(), expiresAt: expiresAt(lucid, summary.validity.ttlSlot), fee: built.fee, requiredSigners: summary.requiredSigners });
+    out({
+      unsigned: file,
+      hash: built.tx.toHash(),
+      expiresAt: expiresAt(lucid, summary.validity.ttlSlot),
+      fee: built.fee,
+      requiredSigners: summary.requiredSigners,
+      note: "Spends the allowance's current UTxO: any other payment from this allowance before submission kills it. If owners see it as dead, run this command again with the same --intent-id.",
+    });
   },
 
   async "tx describe"(argv) {
     const cbor = readFileSync(argv[0] ?? die("usage: vault tx describe <tx.cbor>"), "utf8").trim();
-    out(await describe(await connect(providerFromEnv()), cbor));
+    const lucid = await connect(providerFromEnv());
+    out({ status: await liveness(lucid, cbor), ...(await describe(lucid, cbor)) });
   },
 
   async "tx witness"(argv) {
     const { values: v, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { key: { type: "string" }, out: { type: "string" } } });
     const cbor = readFileSync(positionals[0] ?? die("usage: vault tx witness <tx.cbor> --key k --out k.wit"), "utf8").trim();
     const lucid = await connect(providerFromEnv());
+    await requireLive(lucid, cbor);
     const w = await cosign.witness(lucid, cbor, loadKey(v.key ?? die("--key required")).privateKey);
     writeFileSync(v.out ?? die("--out required"), w);
     out({ witness: v.out, body: lucid.fromTx(cbor).toHash() });
@@ -541,6 +586,9 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
     if (!txFile || !wits.length) return die("usage: vault tx assemble <tx.cbor> <a.wit> <b.wit> ...");
     const lucid = await connect(providerFromEnv());
     const cbor = readFileSync(txFile, "utf8").trim();
+    const l = await liveness(lucid, cbor);
+    if (l.state === "landed") return out({ submitted: lucid.fromTx(cbor).toHash(), alreadyLanded: true });
+    if (l.state === "dead") die(`not submitting: this tx is dead: ${l.reason}`);
     // Lucid needs *a* wallet selected to finish a tx; a read-only one suffices.
     const first = cosign.describeTx(cbor).requiredSigners[0] ?? die("tx has no required signers");
     lucid.selectWallet.fromAddress(addressOf(lucid, first!), []);
