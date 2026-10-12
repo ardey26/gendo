@@ -28,6 +28,12 @@ export type SignerOptions = {
    *  different tx for a known intent is refused until it can be proven dead. */
   chain?: ChainQuery;
   now?: () => number;
+  /**
+   * Socket permissions. 0o600 (default): only the signer's own OS user can
+   * connect. 0o660: members of the socket's group can too, so the signer can run
+   * as a separate user whose key file the agent can't read.
+   */
+  socketMode?: 0o600 | 0o660;
 };
 
 export function witnessFor(txCbor: string, privateKey: string): string {
@@ -40,6 +46,8 @@ export function witnessFor(txCbor: string, privateKey: string): string {
 }
 
 export function startSigner(opts: SignerOptions): Promise<Server> {
+  const socketMode = opts.socketMode ?? 0o600;
+  if (socketMode !== 0o600 && socketMode !== 0o660) throw new Error("socketMode must be 0o600 or 0o660");
   const sk = CML.PrivateKey.from_bech32(opts.privateKey);
   const pkh = sk.to_public().hash().to_hex();
   if (pkh !== opts.policy.agentKeyHash) throw new Error("private key does not match policy.agentKeyHash");
@@ -127,7 +135,7 @@ export function startSigner(opts: SignerOptions): Promise<Server> {
   if (existsSync(opts.socketPath)) unlinkSync(opts.socketPath);
   return new Promise((resolve) =>
     server.listen(opts.socketPath, () => {
-      chmodSync(opts.socketPath, 0o600);
+      chmodSync(opts.socketPath, socketMode);
       resolve(server);
     }),
   );

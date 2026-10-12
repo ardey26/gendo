@@ -10,7 +10,7 @@ import { assemble, describeTx } from "../../src/cosign.js";
 import { requestWitness } from "../../src/signer/client.js";
 import { startSigner } from "../../src/signer/server.js";
 import { SLOT_CONFIG_NETWORK } from "@lucid-evolution/lucid";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LimitError } from "../../src/limits.js";
@@ -157,6 +157,30 @@ describe("vault lifecycle (emulator)", () => {
     }
   });
 
+  it("signer socket: owner-only by default, group-shared with socketMode 0o660, nothing else", async () => {
+    const policy = {
+      agentKeyHash: w.agent.pkh,
+      vaultAddress: vault.address,
+      allowanceUnit: unit,
+      destinations: [w.payee.address],
+      maxTxPerHour: 10,
+      maxPerDay: { lovelace: 100n * ADA },
+      maxTtlMs: 15 * 60_000,
+      allowCoSigned: false,
+      slot: SLOT_CONFIG_NETWORK.Custom,
+    };
+    const dir = mkdtempSync(join(tmpdir(), "signer-"));
+    for (const [mode, file] of [[undefined, "a.sock"], [0o660, "b.sock"]] as const) {
+      const socketPath = join(dir, file);
+      const server = await startSigner({ socketPath, privateKey: w.agent.privateKey, policy, socketMode: mode });
+      expect(statSync(socketPath).mode & 0o777).toBe(mode ?? 0o600);
+      server.close();
+    }
+    expect(() =>
+      startSigner({ socketPath: join(dir, "c.sock"), privateKey: w.agent.privateKey, policy, socketMode: 0o666 as 0o660 }),
+    ).toThrow(/socketMode must be/);
+  });
+
   it("signer dedupes by intent id: a second, different tx for a paid intent is refused, also after a restart", async () => {
     const dir = mkdtempSync(join(tmpdir(), "signer-"));
     let socketPath = join(dir, "signer.sock");
@@ -274,6 +298,35 @@ describe("vault lifecycle (emulator)", () => {
     await signAndSubmit(lucid, emulator, built.tx, [w.agent, w.a, w.c]);
     const strangerUtxos = await lucid.utxosAt(w.stranger.address);
     expect(strangerUtxos.some((u) => u.assets.lovelace === 40n * ADA)).toBe(true);
+  });
+
+  it("over-limit spend stays submittable for hours, past max_tx_validity, so owners can sign on their own machines", async () => {
+    const ctx = await agentCtx();
+    const built = await buildOverLimitSpend({
+      ...ctx,
+      payments: [{ to: w.stranger.address, assets: { lovelace: 12n * ADA } }],
+      intentId: crypto.randomUUID(), purpose: "approved later",
+      cosigners: [w.a.pkh, w.c.pkh],
+      validityMs: 6 * 3_600_000, // the vault's max_tx_validity is 1 h
+    });
+    const ttlMs = lucid.slotToUnixTime(Number(describeTx(built.tx.toCBOR()).validity.ttlSlot));
+    expect(ttlMs - emulator.now()).toBeGreaterThan(5 * 3_600_000);
+    await signAndSubmit(lucid, emulator, built.tx, [w.agent, w.a, w.c]);
+    const strangerUtxos = await lucid.utxosAt(w.stranger.address);
+    expect(strangerUtxos.some((u) => u.assets.lovelace === 12n * ADA)).toBe(true);
+  });
+
+  it("over-limit spend refuses a validity longer than 24 h", async () => {
+    const ctx = await agentCtx();
+    await expect(
+      buildOverLimitSpend({
+        ...ctx,
+        payments: [{ to: w.stranger.address, assets: { lovelace: 12n * ADA } }],
+        intentId: crypto.randomUUID(), purpose: "too long",
+        cosigners: [w.a.pkh, w.c.pkh],
+        validityMs: 25 * 3_600_000,
+      }),
+    ).rejects.toThrow(/exceeds the 86400000 ms maximum/);
   });
 
   it("SDK refuses an over-limit spend with fewer co-signers than the threshold", async () => {

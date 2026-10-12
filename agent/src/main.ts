@@ -20,6 +20,7 @@ import {
   connect,
   credentialToAddress,
   makeVault,
+  owner,
   payOnce,
   providerFromEnv,
   readAllowance,
@@ -136,6 +137,8 @@ async function requestApproval(id: string, reason: string) {
       intentId: inv.id,
       purpose: `invoice ${inv.id} (owner approval: ${reason.slice(0, 80)})`,
       cosigners: config.config.owners.slice(0, Number(config.config.threshold)),
+      // Owners sign on their own machines: give them hours, not the agent's minutes.
+      validityMs: Number(process.env.VAULT_TX_TTL_MS ?? owner.offlineTtlMs(lucid.config().network!)),
     });
     const dir = join(HOME, "approvals");
     mkdirSync(dir, { recursive: true });

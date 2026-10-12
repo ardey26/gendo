@@ -4,7 +4,7 @@
 // script) and keys/<name>.sk (0600; local test keys only, never custody).
 // Network via env: VAULT_NETWORK=Preprod (default, needs BLOCKFROST_PROJECT_ID)
 // or VAULT_NETWORK=Custom for a local devnet (scripts/devnet.sh).
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
@@ -41,8 +41,8 @@ import {
 } from "./sdk.js";
 
 const HOME = resolve(process.env.VAULT_HOME ?? ".vault");
-// Owner-tx TTL: long enough for offline co-signing, inside the network horizon.
-owner.setOwnerTxTtl(Number(process.env.VAULT_TX_TTL_MS ?? (process.env.VAULT_NETWORK === "Custom" ? 90_000 : 10 * 60_000)));
+/** TTL for owner and over-limit txs; set in main() from --ttl, VAULT_TX_TTL_MS, or the defaults. */
+let txTtlMs = 0;
 const KEYS = join(HOME, "keys");
 const STATE = join(HOME, "state.json");
 const ADA = 1_000_000n;
@@ -117,6 +117,10 @@ async function describe(lucid: LucidEvolution, cbor: string) {
   return cosign.describeTx(cbor, { vault: vaultOf(lucid), inputAddresses });
 }
 
+/** When an unsigned tx stops being submittable: signers must finish before this. */
+const expiresAt = (lucid: LucidEvolution, ttlSlot?: string) =>
+  ttlSlot === undefined ? undefined : new Date(lucid.slotToUnixTime(Number(ttlSlot))).toISOString();
+
 async function refScriptOf(lucid: LucidEvolution) {
   const s = loadState();
   if (!s.refScript) return undefined;
@@ -158,7 +162,8 @@ async function finishTx(lucid: LucidEvolution, tx: TxSignBuilder, v: { sign?: st
   const cbor = tx.toCBOR();
   if (v.out) {
     writeFileSync(v.out, cbor);
-    out({ unsigned: v.out, hash: tx.toHash(), witnessesNeeded: "every required signer, plus the proposer", summary: await describe(lucid, cbor) });
+    const summary = await describe(lucid, cbor);
+    out({ unsigned: v.out, hash: tx.toHash(), expiresAt: expiresAt(lucid, summary.validity.ttlSlot), witnessesNeeded: "every required signer, plus the proposer", summary });
     return;
   }
   // The proposer's wallet paid the fee, so their witness is always needed.
@@ -508,10 +513,12 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
       intentId,
       purpose: v.purpose!,
       cosigners: list(v.cosigners).map(pkhOf),
+      validityMs: txTtlMs,
     });
     const file = v.out ?? die("--out tx.cbor required (owners co-sign offline)");
     writeFileSync(file, built.tx.toCBOR());
-    out({ unsigned: file, hash: built.tx.toHash(), fee: built.fee, requiredSigners: cosign.describeTx(built.tx.toCBOR()).requiredSigners });
+    const summary = cosign.describeTx(built.tx.toCBOR());
+    out({ unsigned: file, hash: built.tx.toHash(), expiresAt: expiresAt(lucid, summary.validity.ttlSlot), fee: built.fee, requiredSigners: summary.requiredSigners });
   },
 
   async "tx describe"(argv) {
@@ -562,16 +569,21 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
         "max-ttl": { type: "string", default: "15m" },
         "allow-cosigned": { type: "boolean" },
         audit: { type: "string" },
+        "socket-mode": { type: "string", default: "600" },
       },
     });
     const lucid = await connect(providerFromEnv());
     const vault = vaultOf(lucid);
     const k = loadKey(v.key ?? die("--key required"));
+    // Like ssh: a key file anyone else can read isn't held by the signer alone.
+    if (statSync(keyPath(k.name)).mode & 0o077) die(`${keyPath(k.name)} is readable by group or others; chmod 600 it`);
+    const socketMode = ({ "600": 0o600, "660": 0o660 } as const)[v["socket-mode"] as "600" | "660"] ?? die("--socket-mode must be 600 or 660");
     const { SLOT_CONFIG_NETWORK } = await import("./sdk.js");
     await startSigner({
       socketPath: v.socket ?? join(HOME, "signer.sock"),
       privateKey: k.privateKey,
       auditLog: v.audit ?? join(HOME, "signer-audit.jsonl"),
+      socketMode,
       // Rate/budget counters and the intent-id dedupe table survive restarts.
       statePath: join(HOME, "signer-state.json"),
       chain: chainQuery(),
@@ -614,8 +626,10 @@ const HELP = `vault <command>
   agent spend <unit> --to addr --ada N --intent-id ID --purpose "..." (--signer-socket path | --agent k) [--skip-preflight]
   agent overlimit <unit> --to addr --ada N --intent-id ID --purpose "..." --cosigners a,c --out tx.cbor
   tx describe <tx.cbor> | tx witness <tx.cbor> --key k --out k.wit | tx assemble <tx.cbor> <wits...>
+  --ttl 6h  how long an owner or over-limit tx stays submittable (default 10m, or 2h with --out; max 24h)
   signer start --key agent --allowance <unit> --dest addr1,addr2 [--socket path] [--max-ada-per-day N]
                [--max-per-day unit:qty,...] [--max-tx-per-hour N] [--max-ttl 15m] [--allow-cosigned]
+               [--socket-mode 600|660]   660: run the signer as its own OS user; the agent connects via the group
 env: VAULT_NETWORK=Preprod|Custom, BLOCKFROST_PROJECT_ID, VAULT_HOME`;
 
 
@@ -626,6 +640,21 @@ async function main() {
     console.log(HELP);
     process.exit(a ? 2 : 0);
   }
+  // Txs signed on several machines (--out) need longer than one sitting.
+  const i = rest.indexOf("--ttl");
+  const ttlArg = i >= 0 ? rest.splice(i, 2)[1] ?? die("--ttl needs a duration, e.g. 6h") : undefined;
+  const network = process.env.VAULT_NETWORK ?? "Preprod";
+  txTtlMs = ttlArg
+    ? Number(duration(ttlArg))
+    : process.env.VAULT_TX_TTL_MS
+      ? Number(process.env.VAULT_TX_TTL_MS)
+      : rest.includes("--out")
+        ? owner.offlineTtlMs(network)
+        : network === "Custom"
+          ? 90_000
+          : 10 * 60_000;
+  if (txTtlMs > owner.MAX_OFFLINE_TTL_MS) die(`--ttl can be at most ${owner.MAX_OFFLINE_TTL_MS / 3_600_000}h`);
+  owner.setOwnerTxTtl(txTtlMs);
   for (let attempt = 1; ; attempt++) {
     try {
       return await cmd!(rest);

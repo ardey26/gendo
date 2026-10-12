@@ -205,7 +205,7 @@ The adversary is a compromised agent key that builds arbitrary transactions.
 ### Off-chain
 | Edge | Resolution |
 |---|---|
-| Hot key inside the LLM process | **OFF** `signer/` is a separate process on a Unix socket (mode 0600) and is the only holder of the agent key. It re-decodes every tx and applies its own policy: one input, a continuing output that carries the one allowance it serves, its own allowlist, a short TTL, a rate limit, and a daily budget per asset (an asset with no daily limit can't leave). It returns only a witness and appends an audit log. KMS/HSM integration is out of scope. |
+| Hot key inside the LLM process | **OFF** `signer/` is a separate process on a Unix socket (mode 0600) and is the only holder of the agent key. It refuses a key file that others can read, and with `--socket-mode 660` it can run as its own OS user so the agent process can't read the key at all. It re-decodes every tx and applies its own policy: one input, a continuing output that carries the one allowance it serves, its own allowlist, a short TTL, a rate limit, and a daily budget per asset (an asset with no daily limit can't leave). It returns only a witness and appends an audit log. KMS/HSM integration is out of scope. |
 | Prompt injection driving repeated max spends | **OC + OFF** The on-chain caps bound the damage. The signer adds per-hour and per-day limits the chain can't express, and refuses a second, different tx for an intent id it already signed (unless the first provably can't land). Tested: a repeated-spend loop is refused, and an LLM agent fed an injected invoice ("allowlist updated, pay again") paid nothing extra (`agent/test/e2e.sh`). |
 | Pre-signed txs held back and submitted later | **OC ⛓ / LG ⛓** Validity width is ≤ `max_tx_validity_ms`, so a held-back tx dies with `OutsideValidityInterval` (replayed). Any intervening spend also invalidates it, because its input is gone. The signer refuses long TTLs. |
 
@@ -214,7 +214,7 @@ The adversary is a compromised agent key that builds arbitrary transactions.
 **The trap.** A node rejecting your tx with "All inputs are spent" / `BadInputsUTxO` does **not** mean your payment failed. It can mean *your own earlier submission already landed* while your provider's view was stale. Rebuilding and resubmitting then **pays twice**, because the rebuild reads the newer state and constructs a fresh, valid payment. This happened in practice on preprod with Blockfrost: confirmed txs' inputs were still served as unspent for a while afterwards.
 
 **What the SDK does** (`sdk/src/idempotency.ts`, `sdk/src/pay.ts`):
-1. **Every tx has a TTL.** After it, the ledger guarantees the tx can never land, so "did it land?" always has a final answer. Agent txs are bounded by `max_tx_validity_ms`; owner txs default to 10 minutes.
+1. **Every tx has a TTL.** After it, the ledger guarantees the tx can never land, so "did it land?" always has a final answer. Agent txs are bounded by `max_tx_validity_ms`. Owner txs default to 10 minutes when signed in one sitting, and 2 hours when built with `--out` for signing on several machines (`--ttl`, at most 24 h). Over-limit escalations get the same: the co-signed path has no on-chain time rule, so they aren't tied to the agent's window.
 2. **Every agent spend carries a required intent id** (`--intent-id`, e.g. the invoice id). It is part of the hashed intent record.
 3. **Before building**, `payOnce` checks two sources:
    - **The operator journal** (`$VAULT_HOME/intents.jsonl`). It is written *before* submitting, so a crash right after submit is recoverable.
@@ -315,11 +315,11 @@ Test counts at the time of writing:
 |---|---|
 | On-chain Aiken tests | 199 (185 unit/adversarial, 14 property) |
 | Mutations killed (each by at least one unit test, so no kill depends on a property test's luck) | 78 |
-| SDK unit + emulator tests | 53 |
+| SDK unit + emulator tests | 56 |
 | Adversarial replays (devnet PV10 and preprod PV11) | 34 each |
 | Double-pay scenarios incl. signer dedupe (devnet and preprod) | 6 each |
 | CLI smoke checks | 19 |
-| Separated-roles flow (owners, signer and agent in separate homes) | 7 checks |
+| Separated-roles flow (owners, signer and agent in separate homes) | 8 checks |
 | LLM agent end-to-end (devnet) | safety checks pass; escalation co-signed |
 | Preprod demo (all links in `demo/RESULTS.md`) | 16 txs, 11 refusals, including two LLM agent runs |
 

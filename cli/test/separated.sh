@@ -34,21 +34,30 @@ for h in $OB $OC $SIG $AG; do mkdir -p $h; cp $OA/state.json $h/; done
 ok "vault created; state.json shared"
 
 echo "== step 4: grant built by A, signed by A and B in their own homes"
-UNIT=$(as $OA allowance grant --agent $AGENT_PKH --dest "$PAYEE" --cap lovelace:20:10 --period 1d --expires 7d \
-  --fund 60 --from-treasury --propose me --signers $PA,$PB --out $T/grant.cbor | jq -rs '.[0].allowance')
+GRANT=$(as $OA allowance grant --agent $AGENT_PKH --dest "$PAYEE" --cap lovelace:20:10 --period 1d --expires 7d \
+  --fund 60 --from-treasury --propose me --signers $PA,$PB --out $T/grant.cbor --ttl 3m)
+UNIT=$(jq -rs '.[0].allowance' <<<"$GRANT")
+EXP=$(jq -rs '.[1].expiresAt' <<<"$GRANT")
+LEFT=$(( $(date -j -u -f "%Y-%m-%dT%H:%M:%S" "${EXP%%.*}" +%s 2>/dev/null || date -u -d "$EXP" +%s) - $(date -u +%s) ))
+[[ $LEFT -gt 120 && $LEFT -le 180 ]] || fail "--ttl 3m gave a deadline $LEFT s away ($EXP)"
 as $OB tx describe $T/grant.cbor | jq -e '.vaultRedeemers | index("mint:ManageAllowances")' >/dev/null || fail "describe did not name the vault mint"
 as $OA tx witness $T/grant.cbor --key me --out $T/a.wit >/dev/null
 as $OB tx witness $T/grant.cbor --key me --out $T/b.wit >/dev/null
 as $OA tx assemble $T/grant.cbor $T/a.wit $T/b.wit >/dev/null
-ok "allowance $UNIT granted with offline witnesses"
+ok "allowance $UNIT granted with offline witnesses before its deadline ($EXP)"
 
 echo "== signer in its own home; agent home has no keys"
 SOCK=$SIG/signer.sock
-VAULT_HOME=$SIG "$V" signer start --key agent --allowance "$UNIT" --dest "$PAYEE" --socket $SOCK --max-ttl 5m 2>$SIG/signer.log &
+chmod 640 $SIG/keys/agent.sk
+if VAULT_HOME=$SIG "$V" signer start --key agent --allowance "$UNIT" --dest "$PAYEE" --socket $SOCK 2>/dev/null; then fail "signer started with a group-readable key"; fi
+chmod 600 $SIG/keys/agent.sk
+ok "signer refuses a key file others can read"
+VAULT_HOME=$SIG "$V" signer start --key agent --allowance "$UNIT" --dest "$PAYEE" --socket $SOCK --max-ttl 5m --socket-mode 660 2>$SIG/signer.log &
 SPID=$!; trap 'kill $SPID 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do [[ -S $SOCK ]] && break; sleep 1; done
 [[ ! -d $AG/keys ]] || fail "agent home has a keys dir"
-ok "signer up"
+[[ $(stat -f %Lp $SOCK 2>/dev/null || stat -c %a $SOCK) == 660 ]] || fail "socket is not group-shared"
+ok "signer up; socket 660 for a separate signer user"
 
 echo "== agent pays through the socket"
 as $AG agent spend "$UNIT" --to "$PAYEE" --ada 3 --intent-id INV-1 --signer-socket $SOCK | jq -e .submitted >/dev/null || fail "agent spend"

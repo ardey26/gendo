@@ -10,6 +10,7 @@ import { toPlutusAddress } from "./address.js";
 import { assertAgentShape } from "./guards.js";
 import { INTENT_LABEL, intentHash, intentMetadata, type Intent } from "./intent.js";
 import { LimitError, nextAllowance, windowFor } from "./limits.js";
+import { MAX_OFFLINE_TTL_MS } from "./owner.js";
 import type { Vault } from "./vault.js";
 
 export type Payment = { to: string; assets: Assets };
@@ -35,6 +36,11 @@ export type SpendRequest = {
    * a lower bound after the tip is rejected outright. Defaults to now - 60 s.
    */
   tipMs?: number;
+  /**
+   * How long the tx stays submittable. Agent spends are also capped by
+   * `max_tx_validity_ms` and the window; over-limit spends only by 24 h.
+   * Defaults to 10 minutes.
+   */
   validityMs?: number;
   /**
    * Skip the off-chain preflight and build what the caller asked for. Only for
@@ -69,6 +75,24 @@ function validity(req: SpendRequest) {
   if (ttlSlot <= lowerSlot + 60)
     throw new LimitError("TIME", "too close to a window boundary or expiry; retry after the boundary");
   return { lowerMs: Number(lower), ttlMs: Number(upperExclAligned), lower, upper: upperExclAligned - 1n };
+}
+
+/**
+ * Validity for an over-limit spend. The owners sign it on their own machines,
+ * which can take hours, and `CoSignedSpend` has no on-chain time rule (owners at
+ * threshold could move these funds anyway). So the range isn't tied to the
+ * window or `max_tx_validity_ms`; it only needs a TTL, so the tx's fate stays
+ * decidable. `validityMs` is how long it stays submittable from now.
+ */
+function coSignedValidity(req: SpendRequest) {
+  const { lucid } = req;
+  const now = req.now ?? Date.now();
+  const ttl = req.validityMs ?? 10 * 60_000;
+  if (ttl > MAX_OFFLINE_TTL_MS) throw new Error(`validity ${ttl} ms exceeds the ${MAX_OFFLINE_TTL_MS} ms maximum`);
+  const lowerSlot = lucid.unixTimeToSlot(Math.min(now - 60_000, req.tipMs ?? Infinity));
+  const lower = BigInt(lucid.slotToUnixTime(lowerSlot));
+  const ttlMs = lucid.slotToUnixTime(lucid.unixTimeToSlot(now + ttl));
+  return { lowerMs: Number(lower), ttlMs, lower, upper: BigInt(ttlMs) - 1n };
 }
 
 function normalisePayments(lucid: LucidEvolution, payments: Payment[]): Payment[] {
@@ -192,7 +216,7 @@ export async function buildOverLimitSpend(req: OverLimitRequest): Promise<BuiltS
   const cos = [...new Set(req.cosigners)].filter((k) => owners.has(k));
   if (BigInt(cos.length) < cfg.threshold) throw new Error(`need ${cfg.threshold} owner co-signers, got ${cos.length}`);
   const payments = normalisePayments(lucid, req.payments);
-  const v = validity({ ...req });
+  const v = coSignedValidity(req);
   const intent = makeIntent(req, "co_signed_spend", payments);
   const extraWitnesses = 1 + cos.length;
 

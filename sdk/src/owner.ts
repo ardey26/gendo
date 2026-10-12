@@ -39,7 +39,20 @@ function signers(b: ReturnType<LucidEvolution["newTx"]>, keys: string[]) {
  */
 let ownerTxTtlMs = 10 * 60_000;
 export function setOwnerTxTtl(ms: number) {
+  if (ms > MAX_OFFLINE_TTL_MS) throw new Error(`tx TTL ${ms} ms exceeds the ${MAX_OFFLINE_TTL_MS} ms maximum`);
   ownerTxTtlMs = ms;
+}
+
+/** Upper bound for any TTL: well inside preprod's ~36 h horizon. */
+export const MAX_OFFLINE_TTL_MS = 24 * 3_600_000;
+
+/**
+ * TTL for a tx that several parties sign on their own machines (owner txs
+ * built with `--out`, over-limit escalations). Long enough to collect
+ * signatures on preprod; local devnets have a horizon of minutes.
+ */
+export function offlineTtlMs(network: string): number {
+  return network === "Custom" ? 90_000 : 2 * 3_600_000;
 }
 
 async function finish(lucid: LucidEvolution, b: ReturnType<LucidEvolution["newTx"]>): Promise<TxSignBuilder> {

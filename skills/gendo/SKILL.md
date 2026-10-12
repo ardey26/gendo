@@ -62,7 +62,7 @@ The CLI is `cli/vault`. Every command prints JSON. Anywhere a key name is accept
      --cap lovelace:25:10 --period 1d --expires 30d --max-fee 1 \
      --fund 60 --from-treasury --propose me --signers <pkh_a>,<pkh_b> --out grant.cbor
    ```
-   The output's `allowance` is the unit the agent will use. Each signing owner, and the proposer, checks and signs on their own machine. Then anyone assembles and submits:
+   The output's `allowance` is the unit the agent will use, and `expiresAt` is the deadline for collecting signatures: 2 hours by default for any `--out` tx, or set it with `--ttl 12h` (at most 24h). Each signing owner, and the proposer, checks and signs on their own machine. Then anyone assembles and submits:
    ```bash
    cli/vault tx describe grant.cbor
    cli/vault tx witness grant.cbor --key me --out me.wit
@@ -81,7 +81,17 @@ VAULT_HOME=~/.gendo-signer cli/vault signer start --key agent --allowance <unit>
 - It only signs spends from that one allowance.
 - It keeps a daily budget per asset: lovelace from `--max-ada-per-day`, and each token from `--max-per-day <unit>:<qty>`. A token with no daily limit can't leave.
 - Its rate limits, budgets and intent-id dedupe table persist across restarts.
-- **Keep the signer's home out of the agent's reach.** The key is a file on disk. An agent that can run shell commands or read files as the same user can read it. The on-chain caps still bound the loss (that is the stolen-key case), but the signer's extra limits no longer apply. Run the agent in a sandbox that can't see `~/.gendo-signer`.
+- It refuses to start if the key file is readable by anyone but its owner.
+- **Run it as its own OS user when the agent can run shell commands or read files.** Otherwise the agent can read the key file, and only the on-chain caps still apply (the stolen-key case). With `--socket-mode 660`, members of the socket's group can connect but can't read the key:
+  ```bash
+  # once, as root (Linux; macOS has the same idea with dscl)
+  groupadd gendo && useradd -r -g gendo gendo-signer && usermod -aG gendo <agent-user>
+  install -d -o gendo-signer -g gendo -m 750 /var/lib/gendo-signer      # keys/, state.json, signer state
+  # then, as the signer user
+  sudo -u gendo-signer env VAULT_HOME=/var/lib/gendo-signer cli/vault signer start --key agent \
+    --allowance <unit> --dest <payee_addr> --socket /var/lib/gendo-signer/signer.sock --socket-mode 660
+  ```
+  The agent then pays with `--signer-socket /var/lib/gendo-signer/signer.sock`.
 
 ## Paying (the agent)
 Your `VAULT_HOME` holds only `state.json` and your payment journal, never a key.
@@ -126,7 +136,7 @@ Rotating owners never changes the vault address. Revocation works even if an all
 ## Troubleshooting
 - **"inputs already spent" or `BadInputsUTxO`.** The provider's view lagged. The SDK checks whether the earlier tx actually landed before rebuilding. Never blindly resubmit a fresh payment.
 - **A tx rejected as outside its validity interval.** On preprod the chain tip can lag the wall clock by a minute or more. The SDK anchors validity at the tip. Don't hand-craft validity ranges.
-- **An owner tx expired before everyone signed.** Owner txs are valid for 10 minutes by default. Raise `VAULT_TX_TTL_MS` when building, or rebuild and re-sign.
+- **An owner tx expired before everyone signed.** Check `expiresAt` in the `--out` output. Rebuild with a longer `--ttl` (at most 24h) and re-sign. An escalation also dies as soon as the agent makes any other payment from the allowance, because that spends the UTxO it was built on.
 - **Tests:** `scripts/aiken.sh check` (on-chain), `cd sdk && npx vitest run test/unit test/emulator`, and the devnet suites in `sdk/test/yaci`. `cli/test/separated.sh` runs this skill's setup with every party in its own home. The other test scripts keep every key in one home for convenience; never do that outside tests.
 
 See `README.md` for the architecture, the full threat model and known limitations.
