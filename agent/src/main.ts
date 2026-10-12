@@ -7,27 +7,11 @@
 // invoice data; every payment goes through payOnce (idempotent by invoice id),
 // the signer daemon (holds the key, rate/budget/dedupe), and the on-chain caps
 // and allowlist. Prompt injection in invoice text can't widen any of those.
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { chat, LLM_MODEL, type Message, type ToolSpec } from "./llm.js";
-import {
-  FileJournal,
-  INTENT_LABEL,
-  agent,
-  assertNotPaid,
-  blockfrostQuery,
-  connect,
-  credentialToAddress,
-  makeVault,
-  owner,
-  payOnce,
-  providerFromEnv,
-  readAllowance,
-  readConfig,
-  requestWitness,
-  type LucidEvolution,
-} from "./sdk.js";
+import { session } from "./sdk.js";
 
 type Invoice = { id: string; payee_name: string; payee_address: string; amount_ada: number; description: string };
 
@@ -51,31 +35,18 @@ const need = <T>(x: T | undefined, msg: string): T => {
 };
 
 const invoices: Invoice[] = JSON.parse(readFileSync(need(v.invoices, "--invoices required"), "utf8"));
-const unit = need(v.allowance, "--allowance required");
-const socket = need(v["signer-socket"], "--signer-socket required");
-
-const cfg = providerFromEnv();
-const lucid: LucidEvolution = await connect(cfg);
-const q = blockfrostQuery(cfg.blockfrostUrl, cfg.blockfrostProjectId);
-const state = JSON.parse(readFileSync(join(HOME, "state.json"), "utf8"));
-const vault = makeVault(lucid.config().network!, state.seed);
-const journal = new FileJournal(join(HOME, "intents.jsonl"));
-
-async function agentWallet() {
-  const al = await readAllowance(lucid, vault, unit);
-  const addr = credentialToAddress(lucid.config().network!, { type: "Key", hash: al.datum.agent });
-  const collateral = (await lucid.utxosAt(addr)).find((u) => Object.keys(u.assets).length === 1 && !u.scriptRef);
-  if (!collateral) throw new Error(`agent ${addr} has no pure-ADA collateral UTxO`);
-  lucid.selectWallet.fromAddress(addr, [collateral]);
-  const ref = state.refScript ? (await lucid.utxosByOutRef([state.refScript]))[0] : undefined;
-  return { collateral, refScript: ref?.scriptRef ? ref : undefined };
-}
+// The same session the MCP server uses: budget, pay, request approval. No key, no owner operation.
+const s = await session.openSession({
+  home: HOME,
+  unit: need(v.allowance, "--allowance required"),
+  signerSocket: need(v["signer-socket"], "--signer-socket required"),
+});
 
 const tools: ToolSpec[] = [
   { name: "list_invoices", description: "List the invoices waiting to be paid.", parameters: { type: "object", properties: {} } },
   {
     name: "pay_invoice",
-    description: "Pay one invoice from the agent's allowance. Returns paid, already-paid, or blocked with a reason.",
+    description: "Pay one invoice from the agent's allowance. Returns paid, already_paid, or blocked with a code and the next step.",
     parameters: { type: "object", properties: { invoice_id: { type: "string" } }, required: ["invoice_id"] },
   },
   {
@@ -91,63 +62,23 @@ const tools: ToolSpec[] = [
 
 const find = (id: string) => invoices.find((i) => i.id === id);
 
+// The model only ever names an invoice; payee and amount come from the invoice data.
 async function payInvoice(id: string) {
   const inv = find(id);
   if (!inv) return { status: "blocked", reason: `unknown invoice ${id}` };
-  try {
-    const w = await agentWallet();
-    const r = await payOnce(
-      {
-        lucid,
-        vault,
-        allowanceUnit: unit,
-        collateral: w.collateral,
-        refScript: w.refScript,
-        payments: [{ to: inv.payee_address, assets: { lovelace: BigInt(Math.round(inv.amount_ada * 1e6)) } }],
-        intentId: inv.id,
-        purpose: `invoice ${inv.id}: ${inv.payee_name}`,
-        ref: inv.id,
-      },
-      { q, journal, sign: (cbor) => requestWitness(socket, cbor) },
-    );
-    return r.status === "paid" ? { status: "paid", tx: r.txHash } : { status: "already-paid", tx: r.txHash };
-  } catch (e) {
-    const err = e as Error & { code?: string };
-    return { status: "blocked", code: err.code ?? "REFUSED", reason: err.message.split("\n")[0]?.slice(0, 200) };
-  }
+  return session.pay(s, { to: inv.payee_address, amount_ada: inv.amount_ada, intent_id: inv.id, purpose: `invoice ${inv.id}: ${inv.payee_name}` });
 }
 
 async function requestApproval(id: string, reason: string) {
   const inv = find(id);
   if (!inv) return { status: "blocked", reason: `unknown invoice ${id}` };
-  try {
-    const current = await readAllowance(lucid, vault, unit);
-    await assertNotPaid(q, journal, unit, current.utxo.txHash, inv.id, INTENT_LABEL);
-    const config = await readConfig(lucid, vault);
-    const w = await agentWallet();
-    const built = await agent.buildOverLimitSpend({
-      lucid,
-      vault,
-      allowance: current,
-      config,
-      collateral: w.collateral,
-      refScript: w.refScript,
-      tipMs: await q.tipMs(),
-      payments: [{ to: inv.payee_address, assets: { lovelace: BigInt(Math.round(inv.amount_ada * 1e6)) } }],
-      intentId: inv.id,
-      purpose: `invoice ${inv.id} (owner approval: ${reason.slice(0, 80)})`,
-      cosigners: config.config.owners.slice(0, Number(config.config.threshold)),
-      // Owners sign on their own machines: give them hours, not the agent's minutes.
-      validityMs: Number(process.env.VAULT_TX_TTL_MS ?? owner.offlineTtlMs(lucid.config().network!)),
-    });
-    const dir = join(HOME, "approvals");
-    mkdirSync(dir, { recursive: true });
-    const file = join(dir, `${inv.id}.cbor`);
-    writeFileSync(file, built.tx.toCBOR());
-    return { status: "awaiting_owners", file };
-  } catch (e) {
-    return { status: "blocked", reason: (e as Error).message.split("\n")[0]?.slice(0, 200) };
-  }
+  return session.requestApproval(s, {
+    to: inv.payee_address,
+    amount_ada: inv.amount_ada,
+    intent_id: inv.id,
+    purpose: `invoice ${inv.id}`,
+    reason,
+  });
 }
 
 const system = `You are an accounts-payable agent with a limited spending allowance.

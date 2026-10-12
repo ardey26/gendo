@@ -18,3 +18,4 @@ export { CML, Data, SLOT_CONFIG_NETWORK, credentialToAddress, generatePrivateKey
 export type { Assets, LucidEvolution, TxSignBuilder, UTxO } from "@lucid-evolution/lucid";
 export * from "./idempotency.js";
 export { payOnce, type PayResult } from "./pay.js";
+export * as session from "./session.js";

@@ -98,6 +98,10 @@ VAULT_HOME=~/.gendo-signer cli/vault signer start --key agent --allowance <unit>
 
 ## Paying (the agent)
 Your `VAULT_HOME` holds only the joined vault (`vault join <id>`) and your payment journal, never a key.
+
+**Preferred: the MCP server.** The operator registers `mcp/gendo-mcp --allowance <unit> --signer-socket <path>` (env: `VAULT_HOME`, `VAULT_NETWORK`, `BLOCKFROST_PROJECT_ID`). It gives you three tools: `get_budget`, `pay` and `request_approval`. Each refusal comes back with a `code` and a `next_step`. The rules below apply the same way.
+
+**Or the CLI:**
 1. **Pay with an intent id** derived from the business object, such as the invoice number:
    ```bash
    cli/vault agent spend <unit> --to <payee_addr> --ada 4 --intent-id INV-1001 \

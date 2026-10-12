@@ -1,0 +1,14 @@
+{
+  "name": "@gendo/mcp",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "MCP server for the paying agent: check its budget, pay within it, ask owners for more. Holds no keys.",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.31.0",
+    "zod": "4.6.5"
+  }
+}

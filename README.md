@@ -2,15 +2,70 @@
 
 **Budgeted on-chain accounts for AI agents on Cardano. Owners keep the keys, agents get a bounded allowance, the chain enforces the limits.**
 
-AI agents that handle money today run on hot keys with full-balance exposure, and their spending limits live in software an attacker already controls once the key leaks. This project moves the limits on-chain.
+Think of it as a company card for an AI agent. A team of owners holds the money in a shared vault and gives the agent an allowance: how much per payment, how much per day (or any period), which payees, and until when. The agent pays on its own inside those limits. Anything bigger needs the owners to approve. The limits are enforced by the Cardano blockchain itself, so a stolen agent key loses at most what's left of the allowance, whatever the agent's code, the signer or any service does.
 
-An owner multisig holds a vault. Owners grant each agent an allowance: a cap per time window, a cap per transaction, an allowlist of destinations, and an expiry. The agent spends on its own within those limits, and every node validates them before a transaction is accepted. Anything beyond the limits requires owner signatures on the exact transaction. Owners can pause every agent at once, or revoke a single allowance and reclaim its funds, in one transaction.
+> **Status: MVP, unaudited, preprod only.** Nothing here has had an independent audit. Don't put mainnet value behind it. See [What an auditor should focus on](#what-an-auditor-should-focus-on).
 
-A stolen agent key is bounded loss, not total loss. That property does not depend on the agent's code, the signer, or any service we run.
+## How it works
+
+### Who does what
+| Who | Uses | Can |
+|---|---|---|
+| **Owners** (a team of humans, any m of n) | The CLI (`cli/vault`), each with their own key | Create the vault, set the limits, approve over-limit payments, pause everything, revoke an allowance |
+| **Agent operator** (a human) | The signer daemon | Holds the agent's key, so the agent never does, and adds its own rate and daily limits |
+| **The agent** (your AI) | The MCP server (`mcp/gendo-mcp`), or the CLI or SDK | Check its budget, pay within it, ask the owners for more. It holds no key and can't change its own limits |
+| **The chain** (the vault's validator) | — | Rejects any payment outside the limits, whoever builds it |
+
+### One payment, start to finish
+```mermaid
+sequenceDiagram
+  participant A as Agent (MCP)
+  participant S as Signer (holds the agent key)
+  participant C as Cardano (vault validator)
+  participant O as Owners
+  A->>S: pay 4 ADA to the hosting company, intent INV-1001
+  S->>S: within my rate and daily limits?
+  S-->>A: signature
+  A->>C: submit
+  C->>C: under the per-payment and period caps? approved payee? not expired or paused?
+  alt inside every limit
+    C-->>A: paid
+  else outside any limit
+    C-->>A: refused, and nothing leaves the vault
+  end
+  opt the payment really is bigger than the limits
+    A->>O: request_approval: a file for the owners
+    O->>C: each owner checks it and signs on their own machine
+  end
+```
+
+### Is it an MCP, a CLI or a skill?
+All three, one per role. Only the chain is trusted.
+- **MCP server:** the agent's front door. Three tools: `get_budget`, `pay`, `request_approval`. No owner operation is exposed.
+- **CLI:** the owners' tool: set up the vault, set the limits, sign approvals, pause and revoke. Also for scripts.
+- **Skill** (`npx skills add ardey26/gendo`): teaches an agent the rules (never hold owner keys, reuse intent ids, what each refusal means) and walks humans through setup.
+- **SDK** (TypeScript): for builders. Everything above is built on it.
 
 The name is 限度 (*gendo*), Japanese for a limit, as in 限度額, the spending limit on a credit card.
 
 **Gendo and Masumi.** Masumi is the payment rail and registry: its contracts escrow each payment, and its payment service can cap spend per API key. Those caps are enforced off-chain, by the service that holds the buyer's hot wallet. Gendo is the budget the agent pays from, with the caps enforced on-chain, so they hold even when the agent's key is stolen.
+
+## Get started
+The full walkthrough, with every command, is in [`skills/gendo/SKILL.md`](skills/gendo/SKILL.md). In short (preprod, after `cd sdk && npm ci && cd ../mcp && npm ci`):
+1. **Owners**, each on their own machine, run `cli/vault keys gen me` and share only the key hash. One owner runs `vault create` with everyone's hashes, funds the treasury, and builds the allowance grant with `--out`; the others check it with `tx describe` and sign it with `tx witness`. They share the one-line vault id from `vault info`.
+2. **The agent operator** runs `vault join <id>` and `signer start`, ideally as its own OS user.
+3. **Connect the agent** to the MCP server. It holds no key: its home is only joined to the vault.
+   ```json
+   {
+     "mcpServers": {
+       "gendo": {
+         "command": "/path/to/gendo/mcp/gendo-mcp",
+         "args": ["--allowance", "<allowance unit>", "--signer-socket", "/path/to/signer.sock"],
+         "env": { "VAULT_HOME": "/path/to/agent-home", "VAULT_NETWORK": "Preprod", "BLOCKFROST_PROJECT_ID": "preprod..." }
+       }
+     }
+   }
+   ```
 
 ## Guarantees
 
@@ -21,10 +76,10 @@ The name is 限度 (*gendo*), Japanese for a limit, as in 限度額, the spendin
 
 What is proven today is accounts payable: an agent paying invoices to approved payees. DeFi access is on the [roadmap](#roadmap), not a guarantee.
 
-> **Status: MVP, unaudited, preprod only.** Nothing here has had an independent audit. Don't put mainnet value behind it. See [What an auditor should focus on](#what-an-auditor-should-focus-on).
-
 ## Contents
-- [Quick start](#quick-start)
+- [How it works](#how-it-works)
+- [Get started](#get-started)
+- [Run the tests](#run-the-tests)
 - [Architecture](#architecture)
 - [On-chain rules](#on-chain-rules)
 - [Threat model: every edge and its resolution](#threat-model-every-edge-and-its-resolution)
@@ -34,7 +89,7 @@ What is proven today is accounts payable: an agent paying invoices to approved p
 - [What an auditor should focus on](#what-an-auditor-should-focus-on)
 - [Repository layout and versions](#repository-layout-and-versions)
 
-## Quick start
+## Run the tests
 
 ```bash
 # on-chain: build, tests (unit + property + adversarial), mutation suite, budget check
@@ -50,6 +105,8 @@ scripts/devnet.sh up
 cd sdk && npx vitest run test/yaci      # 34 attacks rejected for the expected reason + 6 double-pay scenarios
 cli/test/smoke.sh                       # every CLI flow, 19 checks
 cli/test/separated.sh                   # the skill's setup with owners, signer and agent in separate homes
+cli/test/signer-user.sh                 # the signer as its own Linux user (runs in a container)
+mcp/test/e2e.sh                         # an MCP client driving the agent's three tools
 agent/test/e2e.sh                       # LLM agent (local Ollama model) paying invoices through the signer
 
 # the same attack + double-pay suites against real preprod (PV11)
@@ -302,7 +359,8 @@ Not built yet. None of this is a guarantee until it ships with tests and an audi
 onchain/            Aiken project: validators/{vault,ref_holder}.ak, lib/vault/*.ak (+ *.test.ak)
 sdk/src/            data, vault, chain, limits (on-chain mirror), agent, owner, cosign, intent, guards, provider, signer/
 sdk/test/           unit/, emulator/ (honest flows), yaci/ (attacker builder + adversarial replay on a real node)
-cli/                `cli/vault` + test/smoke.sh, test/separated.sh
+cli/                `cli/vault` + test/smoke.sh, test/separated.sh, test/signer-user.sh
+mcp/                MCP server for the paying agent (`mcp/gendo-mcp`) + test/e2e.sh
 agent/              LLM accounts-payable agent (`agent/run`) + test/e2e.sh
 demo/               preprod.sh (+ RESULTS.md after a run)
 scripts/            aiken.sh, mutate.sh, mutate-all.sh, mutations.tsv, budget.sh, devnet.sh
@@ -319,7 +377,9 @@ Test counts at the time of writing:
 | Adversarial replays (devnet PV10 and preprod PV11) | 34 each |
 | Double-pay scenarios incl. signer dedupe (devnet and preprod) | 6 each |
 | CLI smoke checks | 19 |
-| Separated-roles flow (owners, signer and agent in separate homes) | 8 checks |
+| Separated-roles flow (owners, signer and agent in separate homes) | 10 checks |
+| Signer as its own Linux user | 6 checks |
+| MCP server end to end (devnet) | 10 checks |
 | LLM agent end-to-end (devnet) | safety checks pass; escalation co-signed |
 | Preprod demo (all links in `demo/RESULTS.md`) | 16 txs, 11 refusals, including two LLM agent runs |
 
