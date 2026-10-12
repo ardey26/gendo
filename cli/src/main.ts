@@ -102,6 +102,24 @@ async function submitSafely(lucid: LucidEvolution, signedCbor: string, intent?: 
   return hash;
 }
 
+/**
+ * One line that identifies a vault, for owners and operators to share instead
+ * of copying state.json: `gendo:<network>:<seed tx>#<i>[:<ref-script tx>#<i>]`.
+ */
+const vaultId = (s: State) =>
+  ["gendo", s.network.toLowerCase(), `${s.seed.txHash}#${s.seed.outputIndex}`, ...(s.refScript ? [`${s.refScript.txHash}#${s.refScript.outputIndex}`] : [])].join(":");
+
+function parseVaultId(id: string): State {
+  const ref = (x: string) => {
+    const m = /^([0-9a-f]{64})#(\d+)$/.exec(x);
+    return m ? { txHash: m[1]!, outputIndex: Number(m[2]) } : die(`bad vault id part ${x}`);
+  };
+  const [tag, net, seed, refScript, ...extra] = id.split(":");
+  if (tag !== "gendo" || !net || !seed || extra.length) die("a vault id looks like gendo:preprod:<tx>#<i>[:<tx>#<i>]");
+  const network = { preprod: "Preprod", custom: "Custom" }[net!] ?? die(`unknown network ${net}`);
+  return { network, seed: ref(seed!), ...(refScript ? { refScript: ref(refScript) } : {}) };
+}
+
 function vaultOf(lucid: LucidEvolution): Vault {
   const s = loadState();
   if (s.network !== lucid.config().network) die(`state is for ${s.network}, connected to ${lucid.config().network} (edge I5)`);
@@ -255,7 +273,20 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
       STATE,
       JSON.stringify({ network: lucid.config().network, seed: vault.seed, refScript: ref ? { txHash: ref.txHash, outputIndex: ref.outputIndex } : undefined }, null, 2),
     );
-    out({ submitted: hash, vault: { address: vault.address, policy: vault.hash }, state: STATE });
+    out({ submitted: hash, vault: { address: vault.address, policy: vault.hash }, id: vaultId(loadState()), state: STATE });
+  },
+
+  async "vault join"(argv) {
+    const s = parseVaultId(argv[0] ?? die("usage: vault vault join <id>   (vault info prints the id)"));
+    const lucid = await connect(providerFromEnv());
+    if (s.network !== lucid.config().network) die(`id is for ${s.network}, but VAULT_NETWORK is ${lucid.config().network}`);
+    if (existsSync(STATE) && vaultId(loadState()) !== vaultId(s)) die(`${STATE} already holds another vault; use a different VAULT_HOME`);
+    const vault = makeVault(lucid.config().network!, s.seed);
+    // Fails unless a vault with this seed exists on-chain, so a typo can't produce a wrong state file.
+    const cfg = await readConfig(lucid, vault);
+    mkdirSync(HOME, { recursive: true });
+    writeFileSync(STATE, JSON.stringify(s, null, 2));
+    out({ joined: vaultId(s), address: vault.address, owners: cfg.config.owners, threshold: cfg.config.threshold, state: STATE });
   },
 
   async "vault info"() {
@@ -265,6 +296,7 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
     const treasury = await treasuryUtxos(lucid, vault);
     const allowances = await listAllowances(lucid, vault);
     out({
+      id: vaultId(loadState()),
       address: vault.address,
       policy: vault.hash,
       config: cfg.config,
@@ -664,7 +696,8 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
 const HELP = `vault <command>
   keys gen|show <name>
   vault create --owners a,b,c --threshold 2 [--max-validity 10m] --payer a
-  vault info
+  vault info                                  (prints the vault id to share)
+  vault join <id>                             (owners and operators: no need to copy state.json)
   treasury fund --ada N --payer a
   treasury pay --to addr --ada N --propose a --sign a,b | --signers a,b --out tx.cbor
   config set [--owners ..] [--threshold N] [--pause|--unpause] [--max-validity 10m] --propose a --sign a,b

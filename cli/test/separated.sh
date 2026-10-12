@@ -30,8 +30,11 @@ ok "agent key only in signer home; one owner key per owner home"
 echo "== step 3: owner A creates the vault from hashes and funds it"
 as $OA vault create --owners $PA,$PB,$PC --threshold 2 --max-validity 2m --payer me >/dev/null
 as $OA treasury fund --ada 300 --payer me >/dev/null
-for h in $OB $OC $SIG $AG; do mkdir -p $h; cp $OA/state.json $h/; done
-ok "vault created; state.json shared"
+ID=$(as $OA vault info | jq -r .id)
+for h in $OB $OC $SIG $AG; do as $h vault join "$ID" >/dev/null; done
+BOGUS="gendo:custom:$(printf 'ab%.0s' $(seq 1 32))#0"
+if as $T/nobody vault join "$BOGUS" >/dev/null 2>&1; then fail "joined a vault that doesn't exist"; fi
+ok "vault created; everyone else joined by its one-line id ($ID); a bogus id is refused"
 
 echo "== step 4: grant built by A, signed by A and B in their own homes"
 GRANT=$(as $OA allowance grant --agent $AGENT_PKH --dest "$PAYEE" --cap lovelace:20:10 --period 1d --expires 7d \

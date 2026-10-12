@@ -29,7 +29,7 @@ When you're helping an **owner on the owner's own machine** (never the agent's),
 |---|---|---|
 | **Owners** (humans, m-of-n) | One owner key each, on their own machine | Vault setup, caps, pause, revoke, co-signing |
 | **Agent operator** (human) | The agent key, inside the signer's own `VAULT_HOME` | The signer daemon |
-| **Paying agent** (you) | No keys. Only the allowance unit, the vault's `state.json` and the signer socket | `agent spend`, `agent overlimit` |
+| **Paying agent** (you) | No keys. Only the allowance unit, the vault id (joined into its `VAULT_HOME`) and the signer socket | `agent spend`, `agent overlimit` |
 
 ## Prerequisites (every machine)
 - **Repo and tools:** clone the repository, use Node 22 or newer, and run `cd sdk && npm ci`.
@@ -55,7 +55,10 @@ The CLI is `cli/vault`. Every command prints JSON. Anywhere a key name is accept
    cli/vault vault create --owners <pkh_a>,<pkh_b>,<pkh_c> --threshold 2 --max-validity 10m --payer me
    cli/vault treasury fund --ada 150 --payer me
    ```
-   This writes `$VAULT_HOME/state.json`. It holds no secrets (the vault's seed and reference-script location). Send it to the other owners and to the agent operator.
+   The output's `id` (also printed by `vault info`) is one line with no secrets. Send it to the other owners and the agent operator; each runs this in their own `VAULT_HOME` (the signer's home too):
+   ```bash
+   cli/vault vault join <id>
+   ```
 4. **Grant the allowance** as an unsigned tx that owners sign separately:
    ```bash
    cli/vault allowance grant --agent <agent_pkh> --dest <payee_addr>[,<payee_addr>...] \
@@ -73,7 +76,7 @@ The CLI is `cli/vault`. Every command prints JSON. Anywhere a key name is accept
 - `--dest` takes **exact full addresses**, stake part included.
 
 ## Agent operator: start the signer
-The signer is the only process that holds the agent key. Give it its own `VAULT_HOME` containing `state.json` and `keys/agent.sk`:
+The signer is the only process that holds the agent key. Give it its own `VAULT_HOME` holding `keys/agent.sk`, joined to the vault with `vault join <id>`:
 ```bash
 VAULT_HOME=~/.gendo-signer cli/vault signer start --key agent --allowance <unit> --dest <payee_addr> \
   --socket ~/.gendo-signer/signer.sock
@@ -94,7 +97,7 @@ VAULT_HOME=~/.gendo-signer cli/vault signer start --key agent --allowance <unit>
   The agent then pays with `--signer-socket /var/lib/gendo-signer/signer.sock`.
 
 ## Paying (the agent)
-Your `VAULT_HOME` holds only `state.json` and your payment journal, never a key.
+Your `VAULT_HOME` holds only the joined vault (`vault join <id>`) and your payment journal, never a key.
 1. **Pay with an intent id** derived from the business object, such as the invoice number:
    ```bash
    cli/vault agent spend <unit> --to <payee_addr> --ada 4 --intent-id INV-1001 \
