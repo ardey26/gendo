@@ -10,7 +10,7 @@ A stolen agent key is bounded loss, not total loss. That property does not depen
 
 The name is 限度 (*gendo*), Japanese for a limit, as in 限度額, the spending limit on a credit card.
 
-**Gendo and Masumi.** Masumi is the payment rail and registry; Gendo is the capped budget the agent pays from. Masumi has no buyer-side limits.
+**Gendo and Masumi.** Masumi is the payment rail and registry: its contracts escrow each payment, and its payment service can cap spend per API key. Those caps are enforced off-chain, by the service that holds the buyer's hot wallet. Gendo is the budget the agent pays from, with the caps enforced on-chain, so they hold even when the agent's key is stolen.
 
 ## Guarantees
 
@@ -49,6 +49,7 @@ cd sdk && npm ci && npx vitest run test/unit test/emulator
 scripts/devnet.sh up
 cd sdk && npx vitest run test/yaci      # 34 attacks rejected for the expected reason + 6 double-pay scenarios
 cli/test/smoke.sh                       # every CLI flow, 19 checks
+cli/test/separated.sh                   # the skill's setup with owners, signer and agent in separate homes
 agent/test/e2e.sh                       # LLM agent (local Ollama model) paying invoices through the signer
 
 # the same attack + double-pay suites against real preprod (PV11)
@@ -301,7 +302,7 @@ Not built yet. None of this is a guarantee until it ships with tests and an audi
 onchain/            Aiken project: validators/{vault,ref_holder}.ak, lib/vault/*.ak (+ *.test.ak)
 sdk/src/            data, vault, chain, limits (on-chain mirror), agent, owner, cosign, intent, guards, provider, signer/
 sdk/test/           unit/, emulator/ (honest flows), yaci/ (attacker builder + adversarial replay on a real node)
-cli/                `cli/vault` + test/smoke.sh
+cli/                `cli/vault` + test/smoke.sh, test/separated.sh
 agent/              LLM accounts-payable agent (`agent/run`) + test/e2e.sh
 demo/               preprod.sh (+ RESULTS.md after a run)
 scripts/            aiken.sh, mutate.sh, mutate-all.sh, mutations.tsv, budget.sh, devnet.sh
@@ -312,16 +313,17 @@ Test counts at the time of writing:
 
 | Area | Count |
 |---|---|
-| On-chain Aiken tests | 188 (174 unit/adversarial, 14 property) |
-| Mutations killed | 78 |
+| On-chain Aiken tests | 199 (185 unit/adversarial, 14 property) |
+| Mutations killed (each by at least one unit test, so no kill depends on a property test's luck) | 78 |
 | SDK unit + emulator tests | 53 |
 | Adversarial replays (devnet PV10 and preprod PV11) | 34 each |
 | Double-pay scenarios incl. signer dedupe (devnet and preprod) | 6 each |
 | CLI smoke checks | 19 |
+| Separated-roles flow (owners, signer and agent in separate homes) | 7 checks |
 | LLM agent end-to-end (devnet) | safety checks pass; escalation co-signed |
 | Preprod demo (all links in `demo/RESULTS.md`) | 16 txs, 11 refusals, including two LLM agent runs |
 
-The devnet, preprod, CLI smoke and LLM agent counts come from the build before the `0 < tx_cap ≤ window_cap` change (see `docs/AUDIT_BRIEF.md` §1a) and haven't been re-run against the new vault hash yet.
+The devnet suites, CLI smoke checks and LLM agent run have been re-run against the current vault hash. The preprod counts come from the build before the `0 < tx_cap ≤ window_cap` change (see `docs/AUDIT_BRIEF.md` §1a) and haven't been re-run yet.
 
 ## License
 

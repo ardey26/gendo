@@ -1,4 +1,5 @@
 use aiken/collection/list
+use aiken/primitive/bytearray
 use aiken/interval.{Finite, Interval, IntervalBound, NegativeInfinity, PositiveInfinity}
 use cardano/address.{Address, Pointer, Script, VerificationKey}
 use cardano/assets
@@ -16,7 +17,7 @@ use vault/fixtures.{
   owner_a, owner_b, owner_c, plain_output, script_address_with_stake, stranger,
   treasury_input, vault, wallet, wallet_with_stake,
 }
-use vault/types.{AllowanceDatum, ConfigDatum}
+use vault/types.{AllowanceDatum, ConfigDatum, max_assets, max_destinations}
 
 fn run(s: Scenario) -> Bool {
   agent_spend(allowance_input(s), vault, intent, build(s))
@@ -96,6 +97,71 @@ test v1_negative_max_fee_malformed() {
 
 test v1_zero_max_fee_well_formed() {
   is_well_formed(AllowanceDatum { ..allowance_fixtures.base_datum(), max_fee: 0 })
+}
+
+// Direct checks of every `is_well_formed` guard. On the agent path several of
+// these also fail for another reason, so only a direct call proves the guard.
+fn wf(f: fn(AllowanceDatum) -> AllowanceDatum) -> Bool {
+  is_well_formed(f(allowance_fixtures.base_datum()))
+}
+
+test wf_base_datum_ok() {
+  wf(fn(d) { d })
+}
+
+test wf_agent_key_wrong_length() {
+  !wf(fn(d) { AllowanceDatum { ..d, agent: bytearray.take(d.agent, 27) } })
+}
+
+test wf_too_many_destinations() {
+  !wf(fn(d) { AllowanceDatum { ..d, destinations: list.repeat(dest_a(), max_destinations + 1) } })
+}
+
+test wf_max_destinations_ok() {
+  wf(fn(d) { AllowanceDatum { ..d, destinations: list.repeat(dest_a(), max_destinations) } })
+}
+
+test wf_script_destination() {
+  !wf(
+    fn(d) {
+      AllowanceDatum {
+        ..d,
+        destinations: [dest_a(), Address { payment_credential: Script(other_script), stake_credential: None }],
+      }
+    },
+  )
+}
+
+test wf_no_caps() {
+  !wf(fn(d) { AllowanceDatum { ..d, caps: [], spent: [] } })
+}
+
+test wf_too_many_caps() {
+  !wf(
+    fn(d) {
+      AllowanceDatum {
+        ..d,
+        caps: list.repeat(lovelace_cap(50_000_000, 20_000_000), max_assets + 1),
+        spent: list.repeat(0, max_assets + 1),
+      }
+    },
+  )
+}
+
+test wf_spent_length_mismatch() {
+  !wf(fn(d) { AllowanceDatum { ..d, spent: [0] } })
+}
+
+test wf_negative_spent() {
+  !wf(fn(d) { AllowanceDatum { ..d, spent: [0, -1] } })
+}
+
+test wf_zero_period() {
+  !wf(fn(d) { AllowanceDatum { ..d, period_ms: 0 } })
+}
+
+test wf_expiry_at_window_start() {
+  !wf(fn(d) { AllowanceDatum { ..d, expires_at: d.window_start } })
 }
 
 test v1_absurd_fee_counts_against_cap() fail {
