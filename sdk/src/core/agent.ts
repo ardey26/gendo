@@ -162,6 +162,28 @@ async function buildOnce(req: SpendRequest, payments: Payment[], fee: bigint, v:
   return { tx, next, intent };
 }
 
+const lesser = (a: bigint, b: bigint) => (a < b ? a : b);
+
+/**
+ * The largest fee the limits leave room for after the payments themselves:
+ * the per-payment and period caps on lovelace (the fee is charged to both) and
+ * `max_fee`. Throws the matching LimitError when the payments alone don't fit.
+ */
+function feeRoom(req: SpendRequest, payments: Payment[], v: ReturnType<typeof validity>) {
+  const d = req.allowance.datum;
+  const paid = add(...payments.map((p) => p.assets));
+  computeNext(req, paid, 0n, v.lower, v.upper, payments); // refuses early, with the right code
+  const i = d.caps.findIndex((c) => c.policy === "" && c.name === "");
+  const w = windowFor(d, v.lower, v.upper);
+  const q = paid.lovelace ?? 0n;
+  const rooms: { code: "TX_CAP" | "WINDOW_CAP" | "FEE"; fee: bigint }[] = [{ code: "FEE", fee: d.maxFee }];
+  if (i >= 0) {
+    rooms.push({ code: "TX_CAP", fee: d.caps[i]!.txCap - q });
+    rooms.push({ code: "WINDOW_CAP", fee: d.caps[i]!.windowCap - w.baseSpent[i]! - q });
+  }
+  return rooms.reduce((a, b) => (b.fee < a.fee ? b : a));
+}
+
 /**
  * Build an unsigned AgentSpend. Two passes: measure the tx, then rebuild with
  * fee = ledger minimum + margin, so the amount charged to the cap is tight.
@@ -171,15 +193,22 @@ export async function buildAgentSpend(req: SpendRequest): Promise<BuiltSpend> {
   const v = validity(req);
   const maxFee = req.allowance.datum.maxFee;
 
-  // Pass 1: find a fee that builds, then measure the real minimum.
-  let probeFee = 400_000n;
+  // Pass 1: find a fee that builds, then measure the real minimum. A probe fee
+  // never exceeds what the limits leave room for: the fee counts against the
+  // caps, so an over-sized probe would be refused (and fail the script) for a
+  // payment that fits with its real fee. If the largest allowed fee can't
+  // build, the payment doesn't fit.
+  const room = req.skipPreflight ? undefined : feeRoom(req, payments, v);
+  let probeFee = room === undefined ? 400_000n : lesser(400_000n, room.fee);
   let probe: Awaited<ReturnType<typeof buildOnce>> | undefined;
   for (let i = 0; i < 4 && !probe; i++) {
     try {
       probe = await buildOnce(req, payments, probeFee, v);
     } catch (e) {
-      if (e instanceof LimitError || i === 3) throw e;
-      probeFee *= 2n;
+      if (e instanceof LimitError) throw e;
+      if (room && probeFee >= room.fee) throw new LimitError(room.code, `no room for the fee: at most ${room.fee} lovelace fits under the ${room.code} limit`);
+      if (i === 3) throw e;
+      probeFee = room === undefined ? probeFee * 2n : lesser(probeFee * 2n, room.fee);
     }
   }
   const refBytes = req.refScript ? req.vault.script.script.length / 2 : 0;
