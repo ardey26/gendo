@@ -94,7 +94,7 @@ What is proven today is accounts payable: an agent paying invoices to approved p
 ```bash
 # on-chain: build, tests (unit + property + adversarial), mutation suite, budget check
 scripts/aiken.sh build && scripts/aiken.sh check
-scripts/mutate-all.sh            # every guard must be load-bearing (78 mutations)
+scripts/mutate-all.sh            # every guard must be load-bearing (85 mutations)
 scripts/budget.sh                # max-size paths < 50% of the per-tx limit
 
 # SDK: unit + emulator flows
@@ -102,7 +102,7 @@ cd sdk && npm ci && npx vitest run test/unit test/emulator
 
 # ledger-real: adversarial replay + double-pay + CLI + LLM agent on a local devnet (Docker)
 scripts/devnet.sh up
-cd sdk && npx vitest run test/yaci      # 34 attacks rejected for the expected reason + 6 double-pay scenarios
+cd sdk && npx vitest run test/yaci      # 38 attacks rejected for the expected reason + 6 double-pay scenarios
 cli/test/smoke.sh                       # every CLI flow, 19 checks
 cli/test/separated.sh                   # the skill's setup with owners, signer and agent in separate homes
 cli/test/signer-user.sh                 # the signer as its own Linux user (runs in a container)
@@ -198,6 +198,8 @@ The input datum is **fully validated on every agent-signed spend**, and every fi
 - **Allowance edits and reclaims.** These never decode the allowance datum, so a corrupted allowance is always reclaimable.
 - **Config updates.** These are validated at write time: 1 ≤ threshold ≤ n ≤ 10, no duplicate owners, 28-byte keys, max validity > 0. The NFT is re-locked at the canonical address.
 
+**Emergency pause** is the one exception to the threshold. Any single current owner may pause an unpaused vault, and change nothing else: the config output keeps its exact value, address and every other field. Unpausing, and every other change, needs the threshold.
+
 ## Threat model: every edge and its resolution
 
 The adversary is a compromised agent key that builds arbitrary transactions.
@@ -247,8 +249,10 @@ The adversary is a compromised agent key that builds arbitrary transactions.
 ### Revocation
 | Edge | Resolution |
 |---|---|
-| Agent front-runs a visible revocation by spending its remaining cap | **DOC** The loss is bounded by what the window still allows: at most `window_cap − spent`, and at most `tx_cap` per tx. Revocation can't be atomic with "now", because the agent's tx can land first. Owners who suspect compromise should **pause first**: one tx halts every allowance. |
+| Agent front-runs a visible revocation by spending its remaining cap | **DOC** The loss is bounded by what the window still allows: at most `window_cap − spent`, and at most `tx_cap` per tx. Revocation can't be atomic with "now", because the agent's tx can land first. Owners who suspect compromise should **pause first**: any one owner can do it alone, and one tx halts every allowance. |
 | Revoke and spend in the same block | **LG ⛓** Both consume the same UTxO, so exactly one lands. |
+| A single owner grief-pauses the vault | **OC ⛓ (accepted)** Any one owner can pause, so one owner can stop every agent. The threshold unpauses, and can rotate that owner out in the same tx. A paused vault can't be paused again, so a griefer can't keep spending the config while the others unpause. |
+| A single owner uses the pause to change anything else | **OC ⛓** Below the threshold the only accepted change is `paused: false → true`; threshold, owners, max validity, value, address, reference script and datum form are all pinned. A non-owner can't pause. |
 
 ### Infra
 | Edge | Resolution |
@@ -335,6 +339,7 @@ The adversary is a compromised agent key that builds arbitrary transactions.
 
 ## Roadmap
 Not built yet. None of this is a guarantee until it ships with tests and an audit.
+- **An owner control panel in the browser** (in progress): owners sign with their own CIP-30 wallets, see every change computed from the chain before signing, and approve agent requests; plus a public read-only page per vault. It uses a small keyless server for pending approvals and notifications. **That server can affect liveness, never custody:** if it's down or hostile, approvals and notifications stop, but no funds can move without owners' wallets, and the CLI remains the fallback for every owner action.
 - **DeFi through per-protocol adapters.** Opt-in per protocol. Each adapter is a small validator, audited before it ships, that forces all proceeds back to the vault. The first target is Minswap V2 swaps. Design and preprod verifications: `docs/DEFI_SPIKE.md`.
 - **Sharded sub-allowances** to lift the one-spend-per-block limit (see [Known limitations](#known-limitations)).
 - **A sliding window** in place of fixed windows, removing the 2× burst.
@@ -372,19 +377,19 @@ Test counts at the time of writing:
 
 | Area | Count |
 |---|---|
-| On-chain Aiken tests | 199 (185 unit/adversarial, 14 property) |
-| Mutations killed (each by at least one unit test, so no kill depends on a property test's luck) | 78 |
-| SDK unit + emulator tests | 56 |
-| Adversarial replays (devnet PV10 and preprod PV11) | 34 each |
+| On-chain Aiken tests | 210 (196 unit/adversarial, 14 property) |
+| Mutations killed (each by at least one unit test, so no kill depends on a property test's luck) | 85 |
+| SDK unit + emulator tests | 64 |
+| Adversarial replays (devnet PV10; preprod PV11) | 38 on devnet; 34 on preprod |
 | Double-pay scenarios incl. signer dedupe (devnet and preprod) | 6 each |
 | CLI smoke checks | 19 |
-| Separated-roles flow (owners, signer and agent in separate homes) | 10 checks |
+| Separated-roles flow (owners, signer and agent in separate homes) | 11 checks |
 | Signer as its own Linux user | 6 checks |
 | MCP server end to end (devnet) | 10 checks |
 | LLM agent end-to-end (devnet) | safety checks pass; escalation co-signed |
 | Preprod demo (all links in `demo/RESULTS.md`) | 16 txs, 11 refusals, including two LLM agent runs |
 
-Every suite above has been re-run against the current vault hash, preprod included (34/34 attacks and 6/6 double-pay scenarios). The preprod demo (`demo/RESULTS.md`) is from the earlier build.
+Every devnet suite above has been re-run against the current vault hash, which adds the emergency pause. Preprod (34/34 attacks, 6/6 double-pay) was last run on the build just before it, and the 4 pause replays have not run on preprod yet. The preprod demo (`demo/RESULTS.md`) is from an earlier build.
 
 ## License
 

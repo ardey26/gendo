@@ -55,6 +55,26 @@ export function isValidConfig(c: ConfigDatum): string[] {
   return p;
 }
 
+/**
+ * Mirrors `owner_manage` on the config: the current owners' threshold may make
+ * any valid change; below it, a single current owner may only pause an
+ * unpaused vault (`emergency_pause`). Returns why the change can't land.
+ */
+export function configChangeProblems(current: ConfigDatum, next: ConfigDatum, signers: string[]): string[] {
+  const owners = new Set(current.owners);
+  const signing = new Set(signers.filter((k) => owners.has(k))).size;
+  if (BigInt(signing) >= current.threshold) return [];
+  const pauseOnly =
+    !current.paused &&
+    next.paused &&
+    next.threshold === current.threshold &&
+    next.maxTxValidityMs === current.maxTxValidityMs &&
+    next.owners.length === current.owners.length &&
+    next.owners.every((o, i) => o === current.owners[i]);
+  if (pauseOnly && signing >= 1) return [];
+  return [`needs ${current.threshold} current owners to sign (got ${signing}); one owner alone can only pause an unpaused vault`];
+}
+
 /** Floor division, matching Plutus `divideInteger`. */
 export const floorDiv = (a: bigint, b: bigint) => {
   const q = a / b;

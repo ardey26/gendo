@@ -10,7 +10,7 @@ import {
   type AllowanceDatum,
 } from "../../src/core/data.js";
 import { canonicalJson, intentHash, intentMetadata, verifyIntent, type Intent } from "../../src/core/intent.js";
-import { floorDiv, nextAllowance, wellFormedProblems, LimitError } from "../../src/core/limits.js";
+import { configChangeProblems, floorDiv, nextAllowance, wellFormedProblems, LimitError } from "../../src/core/limits.js";
 import { evaluate, type SignerPolicy } from "../../src/node/signer/policy.js";
 
 const k = (n: number) => n.toString(16).padStart(2, "0").repeat(28);
@@ -198,3 +198,19 @@ describe("signer policy", () => {
   });
 });
 
+describe("config changes (mirror of owner_manage)", () => {
+  const cfg = { owners: [k(10), k(11), k(12)], threshold: 2n, paused: false, maxTxValidityMs: 600_000n };
+  it("the threshold may make any valid change", () => {
+    expect(configChangeProblems(cfg, { ...cfg, threshold: 3n }, [k(10), k(11)])).toEqual([]);
+  });
+  it("one owner may pause an unpaused vault, and nothing else", () => {
+    expect(configChangeProblems(cfg, { ...cfg, paused: true }, [k(12)])).toEqual([]);
+    expect(configChangeProblems(cfg, { ...cfg, paused: true, threshold: 1n }, [k(12)])).toHaveLength(1);
+    expect(configChangeProblems(cfg, { ...cfg, paused: true, owners: [k(10), k(11), k(13)] }, [k(12)])).toHaveLength(1);
+    expect(configChangeProblems({ ...cfg, paused: true }, cfg, [k(12)])).toHaveLength(1); // unpause
+    expect(configChangeProblems({ ...cfg, paused: true }, { ...cfg, paused: true }, [k(12)])).toHaveLength(1);
+  });
+  it("a non-owner's signature counts for nothing", () => {
+    expect(configChangeProblems(cfg, { ...cfg, paused: true }, [k(13)])).toHaveLength(1);
+  });
+});

@@ -142,8 +142,82 @@ test pause_with_threshold() {
   update(ConfigDatum { ..cfg_2_of_3(), paused: True }, [owner_b, owner_c])
 }
 
-test pause_fails_below_threshold() fail {
-  update(ConfigDatum { ..cfg_2_of_3(), paused: True }, [owner_b])
+// Emergency pause: any single owner, pause only, nothing else changes.
+
+fn pause_with(next: Output, signers: List<ByteArray>) -> Bool {
+  let input = config_input(cfg_2_of_3())
+  owner_manage(input, vault, tx([input], [], [next], signers))
+}
+
+fn paused_cfg() -> ConfigDatum {
+  ConfigDatum { ..cfg_2_of_3(), paused: True }
+}
+
+test single_owner_pauses_alone() {
+  update(paused_cfg(), [owner_b])
+}
+
+test any_owner_can_pause_alone() {
+  update(paused_cfg(), [owner_c])
+}
+
+test non_owner_cannot_pause() {
+  !update(paused_cfg(), [agent_key])
+}
+
+test single_owner_cannot_pause_a_paused_vault() {
+  // Keeps a griefer from spending the config again and again while the others unpause.
+  let input = config_input(paused_cfg())
+  !owner_manage(input, vault, tx([input], [], [config_output(paused_cfg())], [owner_a]))
+}
+
+test single_owner_cannot_change_threshold_while_pausing() {
+  !update(ConfigDatum { ..paused_cfg(), threshold: 1 }, [owner_a])
+}
+
+test single_owner_cannot_rotate_owners_while_pausing() {
+  !update(ConfigDatum { ..paused_cfg(), owners: [owner_a, owner_b, owner_d] }, [owner_a])
+}
+
+test single_owner_cannot_change_max_validity_while_pausing() {
+  !update(ConfigDatum { ..paused_cfg(), max_tx_validity_ms: 999_999_999 }, [owner_a])
+}
+
+test single_owner_cannot_take_ada_from_config_while_pausing() {
+  !pause_with(
+    output(canonical_address(vault), assets.merge(ada(1), config_nft()), paused_cfg()),
+    [owner_a],
+  )
+}
+
+test single_owner_cannot_move_config_while_pausing() {
+  !pause_with(
+    output(
+      script_address_with_stake(owner_a),
+      assets.merge(ada(2), config_nft()),
+      paused_cfg(),
+    ),
+    [owner_a],
+  )
+}
+
+test single_owner_cannot_add_ref_script_while_pausing() {
+  let o = config_output(paused_cfg())
+  !pause_with(Output { ..o, reference_script: Some(other_script) }, [owner_a])
+}
+
+test single_owner_cannot_pause_with_datum_hash() {
+  let o = config_output(paused_cfg())
+  !pause_with(Output { ..o, datum: DatumHash(#"00") }, [owner_a])
+}
+
+test single_owner_pause_cannot_also_spend_treasury() {
+  // The treasury input is judged by the pre-update owners' threshold: one signer fails.
+  let cfg = config_input(cfg_2_of_3())
+  let tr = treasury_input(1, 100)
+  let t =
+    tx([cfg, tr], [], [config_output(paused_cfg()), plain_output(wallet(owner_a), ada(100))], [owner_a])
+  !owner_manage(tr, vault, t)
 }
 
 test unpause_requires_threshold() fail {
@@ -162,8 +236,9 @@ test unpause_with_threshold() {
   )
 }
 
-test update_fails_with_agent_signature_standing_in_for_owner() fail {
-  update(ConfigDatum { ..cfg_2_of_3(), paused: True }, [owner_a, agent_key])
+test update_fails_with_agent_signature_standing_in_for_owner() {
+  // A threshold change (not a pause, which one owner may do alone).
+  !update(ConfigDatum { ..cfg_2_of_3(), threshold: 3 }, [owner_a, agent_key])
 }
 
 test update_fails_to_invalid_owner_set() {

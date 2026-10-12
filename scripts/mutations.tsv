@@ -12,7 +12,6 @@ lib/vault/owner.ak	output.address == canonical_address\(vault\),	True,
 lib/vault/owner.ak	output.reference_script == None,	True,
 lib/vault/owner.ak	is_valid_config\(cfg\)\n	True\n
 lib/vault/owner.ak	expect list.any\(tx.inputs, fn\(i\) \{ i.output_reference == seed \}\)	expect True
-lib/vault/owner.ak	expect threshold_met\(current, tx.extra_signatories\)	expect True
 lib/vault/owner.ak	Pair\(config_token_name, 1\),	Pair(config_token_name, 2),
 lib/vault/allowance.ak	expect \[_\] = tx.inputs	expect True
 lib/vault/allowance.ak	expect assets.is_zero\(tx.mint\)	expect True
@@ -77,3 +76,11 @@ validators/vault.ak	allowance.agent_spend\(own_input, vault_hash, intent_hash, t
 validators/vault.ak	allowance.co_signed_spend\(own_input, vault_hash, intent_hash, tx\)	True
 validators/vault.ak	ManageAllowances -> allowance.manage_allowances\(policy, tx\)	ManageAllowances -> True
 validators/vault.ak	InitConfig -> owner.init_config\(seed, policy, tx\)	InitConfig -> True
+lib/vault/owner.ak	    if threshold_met\(current, tx\.extra_signatories\) \{	    if True {
+lib/vault/owner.ak	    !current\.paused,	    True,
+lib/vault/owner.ak	    list\.any\(current\.owners, fn\(k\) \{ list\.has\(tx\.extra_signatories, k\) \}\),	    True,
+lib/vault/owner.ak	    next\.address == canonical_address\(vault\),	    True,
+lib/vault/owner.ak	    next\.value == before\.value,	    True,
+lib/vault/owner.ak	    next\.reference_script == None,	    True,
+lib/vault/owner.ak	    next\.datum == InlineDatum\(ConfigDatum \{ \.\.current, paused: True \}\),	    True,
+lib/vault/owner.ak	InlineDatum\(ConfigDatum \{ \.\.current, paused: True \}\)	InlineDatum(current)

@@ -85,11 +85,15 @@ as $OA tx assemble $T/ol.cbor $T/agent.wit $T/a2.wit $T/b2.wit >/dev/null
 as $OB tx assemble $T/ol.cbor $T/agent.wit $T/a2.wit $T/b2.wit | jq -e .alreadyLanded >/dev/null || fail "re-assembling a landed tx"
 ok "assembling again reports it already landed"
 
-echo "== pause built by B, signed by A and B"
-as $OB config set --pause --propose me --signers $PA,$PB --out $T/pause.cbor >/dev/null
-as $OA tx witness $T/pause.cbor --key me --out $T/a3.wit >/dev/null
-as $OB tx witness $T/pause.cbor --key me --out $T/b3.wit >/dev/null
-as $OB tx assemble $T/pause.cbor $T/a3.wit $T/b3.wit >/dev/null
+echo "== emergency pause: owner B alone"
+as $OB config set --pause --propose me --sign me >/dev/null
 R=$(as $AG agent spend "$UNIT" --to "$PAYEE" --ada 1 --intent-id INV-3 --signer-socket $SOCK || true)
-[[ $(jq -r .blocked <<<"$R") == PAUSED ]] && ok "paused vault blocks the agent" || fail "expected PAUSED, got $R"
+[[ $(jq -r .blocked <<<"$R") == PAUSED ]] && ok "one owner paused alone; the agent is blocked" || fail "expected PAUSED, got $R"
+if as $OB config set --unpause --propose me --sign me >/dev/null 2>&1; then fail "one owner unpaused alone"; fi
+as $OA config set --unpause --propose me --signers $PA,$PB --out $T/unpause.cbor >/dev/null
+as $OA tx witness $T/unpause.cbor --key me --out $T/a4.wit >/dev/null
+as $OB tx witness $T/unpause.cbor --key me --out $T/b4.wit >/dev/null
+as $OA tx assemble $T/unpause.cbor $T/a4.wit $T/b4.wit >/dev/null
+R=$(as $AG agent spend "$UNIT" --to "$PAYEE" --ada 1 --intent-id INV-4 --signer-socket $SOCK || true)
+jq -e .submitted <<<"$R" >/dev/null && ok "one owner can't unpause; the threshold did, and the agent pays again" || fail "after unpause: $R"
 echo PASS

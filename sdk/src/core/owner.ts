@@ -15,7 +15,7 @@ import {
 } from "./data.js";
 import { toPlutusAddress } from "./address.js";
 import { assertTestnetOutputs, bodyOf } from "./guards.js";
-import { isValidConfig, wellFormedProblems } from "./limits.js";
+import { configChangeProblems, isValidConfig, wellFormedProblems } from "./limits.js";
 import { allowanceName, makeVault, type Vault } from "./vault.js";
 
 const OWNER = spendRedeemer({ kind: "OwnerManage" });
@@ -95,8 +95,8 @@ export async function updateConfig(
   next: ConfigDatum,
   ownerSigners: string[],
 ): Promise<TxSignBuilder> {
-  const problems = isValidConfig(next);
-  if (problems.length) throw new Error(`invalid config: ${problems.join("; ")}`);
+  const problems = [...isValidConfig(next), ...configChangeProblems(current.config, next, ownerSigners)];
+  if (problems.length) throw new Error(`invalid config change: ${problems.join("; ")}`);
   const datum = configToData(next);
   return finish(lucid, 
     signers(

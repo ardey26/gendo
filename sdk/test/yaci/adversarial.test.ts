@@ -5,9 +5,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CML, Data, mintingPolicyToId, scriptFromNative, type UTxO } from "@lucid-evolution/lucid";
 import { buildAgentSpend } from "../../src/core/agent.js";
 import { awaitIndexed } from "../../src/core/chain.js";
-import { allowanceToData, configToData, mintRedeemer, spendRedeemer } from "../../src/core/data.js";
+import { allowanceToData, configToData, mintRedeemer, spendRedeemer, type ConfigDatum } from "../../src/core/data.js";
 import * as owner from "../../src/core/owner.js";
-import { SCRIPT_FAILURE, attack, buildAttack, resign, setPayee, type Ctx } from "./attacker.js";
+import { SCRIPT_FAILURE, attack, blindEvaluator, buildAttack, resign, setPayee, type Ctx } from "./attacker.js";
 import {
   ADA,
   grant,
@@ -24,6 +24,7 @@ import {
   submitRaw,
   treasuryUtxos,
   yaciWorld,
+  type Key,
   type World,
 } from "./world.js";
 
@@ -458,3 +459,55 @@ describe("pause, races, malformed datums", () => {
     await waitForConfig(lucid, vault, await signSubmit(lucid, rotate([a.pkh, b.pkh, cc.pkh]), [a, b]));
   });
 });
+
+describe("emergency pause: one owner may pause, and only pause", () => {
+  // A config update signed by `signer` alone, built without local evaluation so
+  // only the node judges it (the SDK would refuse to build these).
+  async function configTx(next: (c: ConfigDatum) => ConfigDatum, signer: Key) {
+    const cur = await readConfig(w.lucid, w.vault);
+    w.lucid.selectWallet.fromPrivateKey(signer.privateKey);
+    const tx = await w.lucid
+      .newTx()
+      .collectFrom([cur.utxo], spendRedeemer({ kind: "OwnerManage" }))
+      .readFrom([w.refScript])
+      .pay.ToContract(w.vault.address, { kind: "inline", value: configToData(next(cur.config)) }, cur.utxo.assets)
+      .addSignerKey(signer.pkh)
+      .complete({ evaluator: blindEvaluator, setCollateral: 4n * ADA });
+    return (await tx.sign.withWallet().complete()).toCBOR();
+  }
+
+  it("P1 one owner pauses alone; the agent stops; one owner can't unpause; the threshold can", async () => {
+    const paused = await signSubmit(
+      w.lucid,
+      async () => {
+        w.lucid.selectWallet.fromPrivateKey(w.c.privateKey);
+        return owner.pause(w.lucid, w.vault, await readConfig(w.lucid, w.vault), [w.c.pkh]);
+      },
+      [w.c],
+    );
+    await waitForConfig(w.lucid, w.vault, paused);
+    await expectScriptFailure(await attack(() => ctx()));
+    await expectScriptFailure(await submitRaw(await configTx((c) => ({ ...c, paused: false }), w.a)));
+    const unpaused = await signSubmit(
+      w.lucid,
+      async () => {
+        w.lucid.selectWallet.fromPrivateKey(w.a.privateKey);
+        return owner.unpause(w.lucid, w.vault, await readConfig(w.lucid, w.vault), [w.a.pkh, w.b.pkh]);
+      },
+      [w.a, w.b],
+    );
+    await waitForConfig(w.lucid, w.vault, unpaused);
+  });
+
+  it("P2 one owner can't pause and lower the threshold in the same tx", async () =>
+    await expectScriptFailure(await submitRaw(await configTx((c) => ({ ...c, paused: true, threshold: 1n }), w.b))));
+
+  it("P3 one owner can't pause and swap in a new owner set", async () =>
+    await expectScriptFailure(
+      await submitRaw(await configTx((c) => ({ ...c, paused: true, owners: [w.b.pkh], threshold: 1n }), w.b)),
+    ));
+
+  it("P4 a non-owner can't pause", async () =>
+    await expectScriptFailure(await submitRaw(await configTx((c) => ({ ...c, paused: true }), w.stranger))));
+});
+

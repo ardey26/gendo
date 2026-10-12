@@ -51,16 +51,42 @@ pub fn init_config(seed: OutputReference, vault: ScriptHash, tx: Transaction) {
 /// decodes an allowance datum, so a corrupted allowance can always be
 /// reclaimed (edge U6). When the spent UTxO is the config itself, the
 /// threshold of the *current* owners applies and the NFT must be re-locked
-/// with a valid datum.
+/// with a valid datum; the one exception is the emergency pause.
 pub fn owner_manage(own_input: Input, vault: ScriptHash, tx: Transaction) {
   if holds_config_nft(own_input.output, vault) {
     expect InlineDatum(raw) = own_input.output.datum
     expect current: ConfigDatum = raw
-    expect threshold_met(current, tx.extra_signatories)
     expect [next] =
       list.filter(tx.outputs, fn(o) { holds_config_nft(o, vault) })
-    is_valid_config_output(next, vault)
+    if threshold_met(current, tx.extra_signatories) {
+      is_valid_config_output(next, vault)
+    } else {
+      emergency_pause(current, own_input.output, next, vault, tx)
+    }
   } else {
     threshold_met(find_config(tx, vault), tx.extra_signatories)
+  }
+}
+
+/// Any single current owner may pause an unpaused vault, and change nothing
+/// else: the config output keeps its exact value and every other field.
+/// Unpausing, and every other change, needs the threshold. The cost: one owner
+/// can grief-pause; the threshold unpauses (and can rotate that owner out in
+/// the same tx). Requiring an unpaused vault keeps a griefer from spending
+/// the config again and again while the others try to unpause.
+fn emergency_pause(
+  current: ConfigDatum,
+  before: Output,
+  next: Output,
+  vault: ScriptHash,
+  tx: Transaction,
+) -> Bool {
+  and {
+    !current.paused,
+    list.any(current.owners, fn(k) { list.has(tx.extra_signatories, k) }),
+    next.address == canonical_address(vault),
+    next.value == before.value,
+    next.reference_script == None,
+    next.datum == InlineDatum(ConfigDatum { ..current, paused: True }),
   }
 }
