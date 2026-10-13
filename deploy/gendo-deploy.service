@@ -1,0 +1,6 @@
+[Unit]
+Description=Deploy gendo when master changes
+
+[Service]
+Type=oneshot
+ExecStart=/opt/gendo/repo/deploy/update.sh

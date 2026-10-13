@@ -1,0 +1,23 @@
+[Unit]
+Description=gendo app server (keyless: relays proposals, never holds a wallet key)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=gendo
+EnvironmentFile=/etc/gendo/env
+Environment=VAULT_NETWORK=Preprod DB=/var/lib/gendo/gendo.sqlite PORT=8787 STATIC_DIR=/opt/gendo/repo/app/dist
+# Caddy sets X-Real-IP to the visitor's address; without it every visitor would share one rate limit.
+Environment=CLIENT_IP_HEADER=x-real-ip
+ExecStart=/opt/gendo/repo/server/gendo-server
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/gendo
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target
