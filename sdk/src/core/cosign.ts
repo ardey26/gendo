@@ -29,6 +29,8 @@ export type TxSummary = {
   vaultRedeemers: string[];
   /** Every other redeemer: another script, or a spent input whose address wasn't supplied. */
   otherRedeemers: string[];
+  /** The vault redeemer on each vault input, by `txHash#index`. */
+  vaultSpends: Record<string, string>;
   intent?: Intent;
 };
 
@@ -78,6 +80,7 @@ export function describeTx(txCbor: string, opts: DescribeOptions = {}): TxSummar
 
   const vaultRedeemers: string[] = [];
   const otherRedeemers: string[] = [];
+  const vaultSpends: Record<string, string> = {};
   let intentField: string | undefined;
   const push = (tag: number, index: number, data: string) => {
     const kind = tag === 0 ? "spend" : tag === 1 ? "mint" : `tag${tag}`;
@@ -94,6 +97,7 @@ export function describeTx(txCbor: string, opts: DescribeOptions = {}): TxSummar
     }
     const c = Data.from(data) as { index: number; fields: unknown[] };
     vaultRedeemers.push(`${kind}:${REDEEMER_NAMES[kind]?.[c.index] ?? c.index}`);
+    if (kind === "spend") vaultSpends[target!] = REDEEMER_NAMES.spend![c.index] ?? String(c.index);
     if (kind === "spend" && (c.index === 0 || c.index === 1) && typeof c.fields?.[0] === "string" && c.fields[0].length === 64)
       intentField = c.fields[0];
   };
@@ -124,6 +128,7 @@ export function describeTx(txCbor: string, opts: DescribeOptions = {}): TxSummar
     mint,
     vaultRedeemers,
     otherRedeemers,
+    vaultSpends,
     intent,
   };
 }
