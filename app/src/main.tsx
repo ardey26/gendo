@@ -1,18 +1,28 @@
-// app/src/main.tsx
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { parsePolicy } from "./public/format.ts";
+import { parseRoute } from "./route.ts";
+import "./ui/gendo.css";
 
-const PublicPage = lazy(() => import("./public/PublicPage.tsx").then((m) => ({ default: m.PublicPage })));
 const network = (import.meta.env.VITE_NETWORK ?? "Preprod") as "Preprod" | "Custom";
-const policy = parsePolicy(location.pathname);
+const PublicPage = lazy(() => import("./public/PublicPage.tsx").then((m) => ({ default: m.PublicPage })));
+// Owner routes need Lucid: the Buffer polyfill must run before any of it loads.
+const OwnerApp = lazy(async () => {
+  await import("./owner/polyfill.ts");
+  return import("./owner/OwnerApp.tsx");
+});
 
-createRoot(document.getElementById("root")!).render(
-  policy ? (
-    <Suspense fallback={<p>Loading…</p>}><PublicPage policy={policy} network={network} /></Suspense>
-  ) : location.pathname.startsWith("/w/") ? (
-    <main data-ready><h1>No vault found</h1><p>That isn't a vault id.</p></main>
-  ) : (
-    <main><h1>gendo</h1><p>Open a vault's public page at /w/&lt;vault policy id&gt; (vault info prints it).</p></main>
-  ),
-);
+function App() {
+  const [path, setPath] = useState(location.pathname);
+  useEffect(() => {
+    const on = () => setPath(location.pathname);
+    addEventListener("popstate", on);
+    return () => removeEventListener("popstate", on);
+  }, []);
+  const route = parseRoute(path);
+  return (
+    <Suspense fallback={<div className="app"><p style={{ padding: 20 }}>Loading…</p></div>}>
+      {route.page === "public" ? <PublicPage policy={route.policy} network={network} /> : <OwnerApp route={route} network={network} />}
+    </Suspense>
+  );
+}
+createRoot(document.getElementById("root")!).render(<App />);
