@@ -4,6 +4,7 @@
 import { Hono, type Context } from "hono";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { mountAuth } from "./auth.js";
+import { mountPending } from "./pending.js";
 import type { openStore } from "./store.js";
 
 // Only what the public page reads: vault (script, no stake part) addresses, txs, redeemers.
@@ -46,11 +47,7 @@ export function createApp(d: {
   const hits = new Map<string, { minute: number; n: number }>();
   const app = new Hono();
   const auth = mountAuth(app, { store: d.store, now, owners: d.owners });
-  app.get("/vaults/:policy/pending", async (c) => {
-    const who = await auth.ownerOf(c, c.req.param("policy"));
-    if (typeof who !== "string") return who;
-    return c.json([]);
-  });
+  mountPending(app, { store: d.store, now, owners: d.owners, submit: d.submit, upstream: d.upstream }, auth);
 
   const limited = (ip: string) => {
     const minute = Math.floor(now() / 60_000);
