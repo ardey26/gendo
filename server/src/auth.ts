@@ -41,11 +41,11 @@ export function mountAuth(app: Hono, d: { store: ReturnType<typeof openStore>; n
     return c.json({ token, pkh, expiresAt });
   });
 
-  const sessionPkh = (c: Context): string | undefined => {
-    const m = /^Bearer ([0-9a-f]{64})$/.exec(c.req.header("authorization") ?? "");
-    const s = m ? d.store.getSession(sha256(m[1]!)) : undefined;
+  const pkhOfToken = (token: string | undefined): string | undefined => {
+    const s = token && /^[0-9a-f]{64}$/.test(token) ? d.store.getSession(sha256(token)) : undefined;
     return s && s.expiresAt > d.now() ? s.pkh : undefined;
   };
+  const sessionPkh = (c: Context): string | undefined => pkhOfToken(/^Bearer ([0-9a-f]{64})$/.exec(c.req.header("authorization") ?? "")?.[1]);
   /** The signed-in owner of `policy`, or a 401/403 response. */
   const ownerOf = async (c: Context, policy: string): Promise<string | Response> => {
     const pkh = sessionPkh(c);
@@ -54,5 +54,5 @@ export function mountAuth(app: Hono, d: { store: ReturnType<typeof openStore>; n
     if (!owners?.includes(pkh)) return c.json({ error: "not an owner of this vault" }, 403);
     return pkh;
   };
-  return { sessionPkh, ownerOf };
+  return { sessionPkh, ownerOf, pkhOfToken };
 }

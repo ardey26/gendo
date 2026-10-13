@@ -1,5 +1,6 @@
 // The agent editor's rules: the chain's own (is_well_formed) plus what makes a form usable.
 import { MAX_DESTINATIONS } from "../../../sdk/src/core/limits.ts";
+import type { AllowanceDatum, PlutusAddress } from "../../../sdk/src/core/data.ts";
 
 export type AgentForm = { name: string; agentKey: string; perPayment: string; budget: string; period: "day" | "week" | "month"; payees: string[]; expires: string; fund: string };
 export const PERIOD_MS = { day: 86_400_000n, week: 604_800_000n, month: 2_592_000_000n } as const;
@@ -30,4 +31,20 @@ export function agentProblems(f: AgentForm, o: { isNew: boolean; nowMs: number; 
     if (toLovelace(f.fund) === undefined) p.push("Fund it with an ADA amount (0 for none).");
   }
   return p;
+}
+
+/**
+ * The allowance after an edit: the ADA cap is replaced in place (so `spent` stays aligned with
+ * `caps`), token caps are kept, and the period changes only when the owner picked one.
+ */
+export function editedDatum(
+  al: AllowanceDatum,
+  f: { perPayment: bigint; budget: bigint; period: bigint | undefined; payees: string[]; expiresAt: bigint },
+  toAddress: (bech32: string) => PlutusAddress,
+): AllowanceDatum {
+  const lov = { policy: "", name: "", windowCap: f.budget, txCap: f.perPayment };
+  const i = al.caps.findIndex((c) => c.policy === "" && c.name === "");
+  const caps = i >= 0 ? al.caps.map((c, j) => (j === i ? lov : c)) : [...al.caps, lov];
+  const spent = i >= 0 ? al.spent : [...al.spent, 0n];
+  return { ...al, caps, spent, destinations: f.payees.map(toAddress), periodMs: f.period ?? al.periodMs, expiresAt: f.expiresAt };
 }

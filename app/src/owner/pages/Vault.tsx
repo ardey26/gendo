@@ -4,7 +4,8 @@ import { ada, allowanceSentence, cleanPurpose, paymentLine } from "../../public/
 import { navigate } from "../../route.ts";
 import { api } from "../api.ts";
 import { chainGet, readLight, vaultFromId } from "../chain.ts";
-import { buildRecipe, decodeRecipe, encodeRecipe, titleOf, type Recipe } from "../recipes.ts";
+import { decodeRecipe, encodeRecipe, titleOf, type Recipe } from "../recipes.ts";
+import { prepare, useReview } from "../review.tsx";
 import { toLovelace } from "../validate.ts";
 import { Copy, ErrorNote, Link, Shell, Signers, defaultSigners, short, useLoad, useOwner, usePoll } from "../ui.tsx";
 import { Spinner } from "../../ui/Brand.tsx";
@@ -18,6 +19,7 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
     const [view, listing, pending] = await Promise.all([readLight(policy, o.net), api.listing(policy), api.pendingOf(policy)]);
     return { view, labels: listing?.agents ?? {}, listing, pending };
   }, [policy]);
+  const review = useReview();
   const [busy, setBusy] = useState<string>();
   const [err, setErr] = useState<string>();
   const [note, setNote] = useState<string>();
@@ -39,9 +41,11 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
     setErr(undefined);
     setNote(undefined);
     try {
-      const tx = await buildRecipe(o.lucid, vaultFromId(mine.vaultId), r, o.me.pkh);
+      const prepared = await prepare(o, vaultFromId(mine.vaultId), r, data.data?.labels ?? {});
+      setBusy(undefined);
+      if (!(await review.ask(prepared))) return;
       setBusy("Waiting for your wallet…");
-      const cbor = tx.toCBOR();
+      const cbor = prepared.cbor;
       const p = await api.propose(policy, { cbor, witness: await partialSign(o.me, cbor), title: titleOf(r, data.data?.labels ?? {}), recipe: encodeRecipe(r) });
       setNote(p.status === "open" ? `${done} Signed by you: ${p.signedBy.length} of ${p.requiredSigners.length}. It's in the other owners' Needs you.` : `${done} Sent, waiting for the chain.`);
       data.reload();
@@ -67,6 +71,7 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
       title={<><span style={{ fontWeight: 700, fontSize: 15 }}>{mine.name ?? "Unnamed vault"}</span>{cfg && <span className={cfg.paused ? "pill fill" : "pill"}>{cfg.paused ? "Paused" : "Active"}</span>}{cfg && <span className="faint">{String(cfg.threshold)} of {cfg.owners.length} owners</span>}</>}
       actions={pauseControls}
     >
+      {review.panel}
       {cfg?.paused && <div className="banner">All agents are paused. No agent can pay. Unpausing needs {String(cfg.threshold)} of {cfg.owners.length} owners.</div>}
       <div className="tabs" role="tablist">
         {(["agents", "activity", "treasury", "settings"] as const).map((t) => (

@@ -1,6 +1,6 @@
 // After `vite build`: the public route (entry + PublicPage chunk and their static imports) must ship
 // no WASM, no Lucid, and stay under 200 KB gzipped. Owner routes may load Lucid.
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 const dist = new URL("../dist/", import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL(".vite/manifest.json", dist), "utf8"));
@@ -23,4 +23,7 @@ for (const f of files) {
   gz += gzipSync(body).length;
 }
 if (gz > 200_000) throw new Error(`public route is ${gz} bytes gzipped (limit 200000)`);
+// The test-only CIP-30 wallet must never ship in a production build.
+for (const f of readdirSync(new URL("assets/", dist)))
+  if (/\.js$/.test(f) && readFileSync(new URL(`assets/${f}`, dist), "utf8").includes("gendotest")) throw new Error(`test wallet code in ${f}`);
 console.log(`ok: public route ${files.size} files, ${gz} bytes gzipped, no WASM, no Lucid`);

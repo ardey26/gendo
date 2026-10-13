@@ -35,7 +35,16 @@ export function wallets(): WalletChoice[] {
   return [...found, ...KNOWN.filter((k) => !inj[k.id]).map((k) => ({ ...k, installed: false }))];
 }
 
-export type Connected = { id: string; name: string; api: Cip30; addressHex: string; address: string; pkh: string };
+/** `keys`: every payment key hash the wallet showed us (an HD wallet signs for all of them). */
+export type Connected = { id: string; name: string; api: Cip30; addressHex: string; address: string; pkh: string; keys: string[] };
+
+const keyOfHex = (hex: string) => {
+  try {
+    return CML.Address.from_raw_bytes(fromHex(hex)).payment_cred()?.as_pub_key()?.to_hex();
+  } catch {
+    return undefined;
+  }
+};
 
 export async function connectWallet(id: string): Promise<Connected> {
   const w = injected()[id];
@@ -51,7 +60,17 @@ export async function connectWallet(id: string): Promise<Connected> {
   const a = CML.Address.from_raw_bytes(fromHex(addressHex));
   const pkh = a.payment_cred()?.as_pub_key()?.to_hex();
   if (!pkh) throw new WalletError("NOT_FOUND", "This wallet's address has no payment key.");
-  return { id, name: w.name ?? id, api, addressHex, address: a.to_bech32(), pkh };
+  const used = await api.getUsedAddresses().catch(() => [] as string[]);
+  const change = await api.getChangeAddress().catch(() => addressHex);
+  const utxoAddrs = ((await api.getUtxos().catch(() => undefined)) ?? []).map((u) => {
+    try {
+      return CML.TransactionUnspentOutput.from_cbor_hex(u).output().address().to_hex();
+    } catch {
+      return "";
+    }
+  });
+  const keys = [...new Set([pkh, ...[...used, change, ...utxoAddrs].map(keyOfHex).filter((k): k is string => !!k)])];
+  return { id, name: w.name ?? id, api, addressHex, address: a.to_bech32(), pkh, keys };
 }
 
 export async function partialSign(c: Connected, cbor: string): Promise<string> {

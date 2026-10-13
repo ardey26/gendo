@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { openStore } from "../src/store.js";
+import { signIn, wallet } from "./helpers.js";
 
 const store = () => openStore(join(mkdtempSync(join(tmpdir(), "gendo-srv-")), "db.sqlite"));
 const policy = "ab".repeat(28);
@@ -129,15 +130,16 @@ describe("chain proxy for the owner pages", () => {
 });
 
 describe("fresh reads for owners", () => {
-  it("a request marked no-cache skips the cache: owners build txs on the chain's current state", async () => {
+  it("only a signed-in owner's session skips the cache; anyone else gets the cached answer", async () => {
     let calls = 0;
     const app = createApp({ owners: async () => undefined, allowanceOf: async () => undefined, submit: async () => ({ ok: false as const, error: "unused" }), store: store(), upstream: async () => (calls++, new Response("[]", { status: 200 })) });
     const path = "/chain/addresses/addr_test1vq9jmx22305ltuwma9kmz2vcgde7rvydaynfxwqvfrypp9c97slgs/utxos";
     await app.request(path);
-    await app.request(path);
-    expect(calls).toBe(1);
     await app.request(path, { headers: { project_id: "no-cache" } });
+    await app.request(path, { headers: { project_id: "f".repeat(64) } });
+    expect(calls).toBe(1);
+    const { token } = await (await signIn(app, wallet())).json();
+    await app.request(path, { headers: { project_id: token } });
     expect(calls).toBe(2);
   });
 });
-

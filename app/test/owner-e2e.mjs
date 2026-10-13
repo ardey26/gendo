@@ -21,6 +21,8 @@ try {
 
   await A.open(`${APP}/v/${POLICY}`);
   await A.click(/^Pause all agents$/);
+  await A.waitText(/Review before signing[\s\S]*Pause all agents[\s\S]*Paused\s+no\s+yes/);
+  await A.click(/^Sign with wallet$/);
   await A.waitText(/Pause sent/);
   for (let i = 0; i < 40; i++) {
     await A.open(`${APP}/v/${POLICY}`);
@@ -29,11 +31,13 @@ try {
     await new Promise((r) => setTimeout(r, 2000));
   }
   await A.waitText(/All agents are paused/);
-  ok("one owner paused the vault alone; it landed");
+  ok("one owner paused the vault alone, after reviewing it in the browser; it landed");
 
   await A.open(`${APP}/v/${POLICY}/settings`);
   await A.waitText(/Who signs/);
   await A.click(/^Propose unpause$/);
+  await A.waitText(/Review before signing[\s\S]*Paused\s+yes\s+no/);
+  await A.click(/^Sign with wallet$/);
   await A.waitText(/Unpause proposed/);
   ok("owner A proposed the unpause, naming owner B");
 
@@ -56,8 +60,10 @@ try {
   await A.fill("budget", "40");
   await A.waitText(/40 ADA per day/);
   await A.click(/^Propose change$/);
+  await A.waitText(/Review before signing[\s\S]*Budget\s+25 ADA \/ day\s+40 ADA \/ day/);
+  await A.click(/^Sign with wallet$/);
   await A.waitText(/Proposed\. Signed by you: 1 of 2/);
-  ok("owner A proposed a budget raise in the agent editor");
+  ok("owner A proposed a budget raise in the agent editor, after reviewing the diff computed in the browser");
   await B.open(`${APP}/inbox`);
   await B.waitText(/Budget\s+25 ADA \/ day\s+40 ADA \/ day/);
   await B.click(/^Sign with wallet$/);

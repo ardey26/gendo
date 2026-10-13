@@ -11,7 +11,7 @@ const al = (txCap: bigint, windowCap: bigint, payees = 3): AllowanceDatum => ({
   spent: [0n], windowStart: 1_790_000_000_000n, periodMs: 86_400_000n, expiresAt: BigInt(Date.UTC(2026, 10, 30)), maxFee: 2_000_000n,
 });
 const base: Omit<Explanation, "changes"> = { hash: "aa".repeat(32), requiredSigners: [h(1), h(2)], changes: [] as never, leavesVault: {}, flows: [], collateralAtRisk: [], fee: 300_000n, warnings: [] } as never;
-const ctx = { viewer: h(1), labels: { [h(5) + "01"]: "payout-bot" }, payeesOf: (d: AllowanceDatum) => d.destinations.map((_, i) => `addr_test1q${i}`), isMine: () => false, short: (s: string) => s.slice(0, 10) };
+const ctx = { viewer: h(1), vaultAddress: "addr_test1wvault", labels: { [h(5) + "01"]: "payout-bot" }, payeesOf: (d: AllowanceDatum) => d.destinations.map((_, i) => `addr_test1q${i}`), isMine: () => false, short: (s: string) => s.slice(0, 10) };
 
 describe("detailOf", () => {
   it("a budget raise: one changed row and the two sentences", () => {
@@ -30,8 +30,8 @@ describe("detailOf", () => {
     const c = { owners: [h(1), h(2), h(3)], threshold: 2n, paused: false, maxTxValidityMs: 600_000n };
     const d = detailOf({ ...base, changes: [{ kind: "config", before: c, after: { ...c, owners: [h(1), h(2), h(4)] } }] }, ctx);
     expect(d.title).toBe("Change owners or threshold");
-    expect(d.rows).toContainEqual({ k: "Owner added", now: "—", next: h(4).slice(0, 10), changed: true });
-    expect(d.rows).toContainEqual({ k: "Owner removed", now: h(3).slice(0, 10), next: "—", changed: true });
+    expect(d.rows).toContainEqual({ k: "Owner added", now: "—", next: h(4), changed: true });
+    expect(d.rows).toContainEqual({ k: "Owner removed", now: h(3), next: "—", changed: true });
   });
   it("an agent request: payee, amount over the cap, the agent's words marked as its own", () => {
     const e = {
@@ -54,7 +54,7 @@ describe("detailOf", () => {
     expect(d.title).toBe("Pay from the treasury");
     expect(d.money).toEqual([
       { label: "Leaves the vault", value: "7 ADA" },
-      { label: "To addr_test1", value: "7 ADA" },
+      { label: "To addr_test1qx", value: "7 ADA" },
       { label: "From your wallet", value: "1.3 ADA" },
     ]);
   });
@@ -64,4 +64,15 @@ describe("detailOf", () => {
     expect(needsConfirm(d)).toBe(true);
   });
   it("sentence matches the public page's", () => expect(sentence(al(10_000_000n, 25_000_000n, 1), 1)).toBe("This agent can pay up to 10 ADA at a time and 25 ADA per day, only to this address, until 2026-11-30."));
+});
+
+describe("review screens show everything in full", () => {
+  it("payees, owners and agent keys are never shortened; a payment to another script is not the treasury", () => {
+    const d = detailOf({ ...base, changes: [{ kind: "grant", unit: h(5) + "02", after: al(5_000_000n, 20_000_000n, 1), lovelace: 30_000_000n }] }, ctx);
+    expect(d.rows).toContainEqual({ k: "Agent key", now: "—", next: h(9), changed: true });
+    expect(d.rows).toContainEqual({ k: "Payee added", now: "—", next: "addr_test1q0", changed: true });
+    const other = detailOf({ ...base, changes: [], flows: [{ address: "addr_test1wsomeotherscript", delta: { lovelace: 5_000_000n } }] }, ctx);
+    expect(other.title).not.toBe("Fund the treasury");
+    expect(other.money).toContainEqual({ label: "To addr_test1wsomeotherscript", value: "5 ADA" });
+  });
 });

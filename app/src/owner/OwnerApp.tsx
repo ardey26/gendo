@@ -3,7 +3,8 @@ import type { LucidEvolution } from "../../../sdk/src/core/index.ts";
 import type { Route } from "../route.ts";
 import { Netband, Spinner } from "../ui/Brand.tsx";
 import { SERVER_DOWN, api, session, type MyVault } from "./api.ts";
-import { openChain } from "./chain.ts";
+import { openChain, readThroughSession } from "./chain.ts";
+import { consistentVaults } from "./vaults.ts";
 import { AgentEditor } from "./pages/AgentEditor.tsx";
 import { Inbox } from "./pages/Inbox.tsx";
 import { Connect, Start } from "./pages/Start.tsx";
@@ -26,7 +27,8 @@ export default function OwnerApp({ route, network }: { route: Route; network: Ne
         if (import.meta.env.VITE_TEST_WALLETS === "1") (await import("./testwallet.ts")).installTestWallet(l);
         setLucid(l);
       })
-      .catch(() => setFatal("The chain is unavailable right now. Try again in a minute."));
+      // /chain is on our server: if it can't be reached at all, say so with the CLI fallback.
+      .catch((e) => setFatal(e instanceof TypeError ? SERVER_DOWN : "The chain is unavailable right now. Try again in a minute."));
   }, [network]);
 
   // A session in this tab: reconnect the same wallet quietly.
@@ -39,12 +41,20 @@ export default function OwnerApp({ route, network }: { route: Route; network: Ne
   }, [lucid]);
 
   useEffect(() => {
-    if (lucid && me) lucid.selectWallet.fromAPI(me.api as never);
+    if (!lucid || !me) return;
+    readThroughSession(lucid);
+    lucid.selectWallet.fromAPI(me.api as never);
   }, [lucid, me]);
+
+  useEffect(() => {
+    const on = () => setDown(true);
+    addEventListener("gendo:server-down", on);
+    return () => removeEventListener("gendo:server-down", on);
+  }, []);
 
   const reloadVaults = useCallback(async () => {
     try {
-      setVaults(await api.myVaults());
+      setVaults(consistentVaults(await api.myVaults()));
       setDown(false);
     } catch (e) {
       if ((e as Error).message === SERVER_DOWN) setDown(true);

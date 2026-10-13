@@ -44,6 +44,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   } catch {
+    globalThis.dispatchEvent?.(new Event("gendo:server-down"));
     throw new ApiError(0, SERVER_DOWN);
   }
   const j = (await r.json().catch(() => ({}))) as { error?: string };

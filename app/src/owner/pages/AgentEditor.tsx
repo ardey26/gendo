@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fromPlutusAddress, readAllowance, readConfig, toPlutusAddress, type AllowanceDatum } from "../../../../sdk/src/core/index.ts";
 import { api } from "../api.ts";
 import { vaultFromId } from "../chain.ts";
 import { sentence } from "../diff.ts";
-import { buildRecipe, encodeRecipe, titleOf, type Recipe } from "../recipes.ts";
-import { agentProblems, PERIOD_MS, toLovelace, type AgentForm } from "../validate.ts";
+import { encodeRecipe, titleOf, type Recipe } from "../recipes.ts";
+import { prepare, useReview } from "../review.tsx";
+import { agentProblems, editedDatum, PERIOD_MS, toLovelace, type AgentForm } from "../validate.ts";
 import { Copy, ErrorNote, Link, Shell, Signers, defaultSigners, short, useLoad, useOwner } from "../ui.tsx";
 import { partialSign } from "../wallet.ts";
 import { Spinner } from "../../ui/Brand.tsx";
@@ -14,7 +15,9 @@ const periodOf = (ms: bigint): AgentForm["period"] => (ms === PERIOD_MS.week ? "
 export function AgentEditor({ policy, unit }: { policy: string; unit?: string }) {
   const o = useOwner();
   const mine = o.vaults.find((v) => v.policy === policy);
-  const vault = mine ? vaultFromId(mine.vaultId) : undefined;
+  const vault = useMemo(() => (mine ? vaultFromId(mine.vaultId) : undefined), [mine?.vaultId]);
+  const review = useReview();
+  const [periodTouched, setPeriodTouched] = useState(false);
   const loaded = useLoad(async () => {
     if (!vault) return undefined;
     const [cfg, al, listing] = await Promise.all([readConfig(o.lucid, vault), unit ? readAllowance(o.lucid, vault, unit) : Promise.resolve(undefined), api.listing(policy)]);
@@ -52,14 +55,18 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
       return false;
     }
   };
-  const problems = d ? agentProblems(f, { isNew: !unit, nowMs: Date.now(), owners: d.cfg.owners, isKeyAddress }) : [];
+  const problems = d ? agentProblems(f, { isNew: !unit, nowMs: Date.now(), owners: d.cfg.owners, isKeyAddress }) : [loaded.error ? "Couldn't read this vault from the chain." : "Reading the vault from the chain…"];
   const expiresAt = BigInt(Date.parse(`${f.expires}T23:59:59Z`) || 0);
   const draft = (): AllowanceDatum | undefined => {
     if (problems.length || !d) return undefined;
-    const lov = { policy: "", name: "", windowCap: toLovelace(f.budget)!, txCap: toLovelace(f.perPayment)! };
-    const destinations = f.payees.map((a) => toPlutusAddress(a, o.net));
-    if (d.al) return { ...d.al, caps: [lov, ...d.al.caps.filter((c) => c.policy !== "")], destinations, periodMs: PERIOD_MS[f.period], expiresAt };
-    return undefined;
+    if (!d.al) return undefined;
+    // Keep the on-chain expiry time when the owner didn't change the date.
+    const sameDay = new Date(Number(d.al.expiresAt)).toISOString().slice(0, 10) === f.expires;
+    return editedDatum(
+      d.al,
+      { perPayment: toLovelace(f.perPayment)!, budget: toLovelace(f.budget)!, period: periodTouched ? PERIOD_MS[f.period] : undefined, payees: f.payees, expiresAt: sameDay ? d.al.expiresAt : expiresAt },
+      (a) => toPlutusAddress(a, o.net),
+    );
   };
   const next = draft();
   const live = sentence(
@@ -71,10 +78,13 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
     setErr(undefined);
     setNote(undefined);
     try {
-      const tx = await buildRecipe(o.lucid, vault, r, o.me.pkh);
+      const prepared = await prepare(o, vault, r, d?.labels ?? {});
+      setBusy(undefined);
+      if (!(await review.ask(prepared))) return;
       setBusy("Waiting for your wallet…");
-      const cbor = tx.toCBOR();
+      const cbor = prepared.cbor;
       const p = await api.propose(policy, { cbor, witness: await partialSign(o.me, cbor), title: titleOf(r, d?.labels ?? {}), recipe: encodeRecipe(r) });
+      if (unit && f.name.trim() && f.name.trim() !== (d?.labels[unit] ?? "")) await api.setLabel(policy, unit, f.name.trim()).catch(() => undefined);
       setNote(`${done} Signed by you: ${p.signedBy.length} of ${p.requiredSigners.length}. It's in the other owners' Needs you. Nothing changes on-chain until it lands.`);
       void o.reloadInbox();
     } catch (e) {
@@ -85,7 +95,6 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
   };
   const save = async () => {
     if (unit && d?.al && next) {
-      if (f.name.trim() && f.name.trim() !== (d.labels[unit] ?? "")) await api.setLabel(policy, unit, f.name.trim()).catch(() => undefined);
       return propose({ op: "edit", unit, next, topUp: 0n, signers }, "Proposed.");
     }
     if (!unit && !problems.length) {
@@ -110,13 +119,14 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
       title={<><Link to={`/v/${policy}`}>{mine.name ?? "Vault"}</Link><span className="faint">/</span><Link to={`/v/${policy}/agents`}>Agents</Link><span className="faint">/</span><span>{name}</span></>}
       actions={<button type="button" className="btn pri" disabled={!!busy || problems.length > 0 || signers.length !== threshold} onClick={() => void save()}>{unit ? "Propose change" : "Propose agent"}</button>}
     >
+      {review.panel}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, padding: "16px 20px", alignItems: "flex-start" }} {...(loaded.loading ? {} : { "data-ready": "" })}>
         <section className="panel" style={{ flex: "999 1 480px", minWidth: 0 }}>
           <div className="ph"><h2>Allowance</h2><span className="cap">Changes need {threshold} of {d?.cfg.owners.length ?? "?"} owners</span></div>
           {field("aname", "Name", <input id="aname" value={f.name} onChange={set("name")} placeholder="payout-bot" />, "Only shown in the app and on the public page.")}
-          {!unit && field("akey", "Agent key hash", <input id="akey" value={f.agentKey} onChange={(e) => setF({ ...f, agentKey: e.target.value.trim() })} placeholder="56 hex characters" style={{ width: "100%" }} />, "The operator runs cli/vault keys gen agent in the signer's home and sends you the key hash. The key never leaves that machine.")}
+          {!unit && field("akey", "Agent key hash", <input id="akey" value={f.agentKey} onChange={(e) => setF({ ...f, agentKey: e.target.value.trim() })} placeholder="56 hex characters" style={{ width: "100%" }} />, "The agent's ID. Whoever runs the agent makes it on the signer's machine with cli/vault keys gen agent and sends you the pkh it prints. The private key never leaves that machine.")}
           {field("cap", "Per-payment cap", <><input id="cap" value={f.perPayment} onChange={set("perPayment")} style={{ width: 120 }} /> <span className="faint">ADA</span></>, "Most the agent can pay in one payment.")}
-          {field("budget", "Budget", <><input id="budget" value={f.budget} onChange={set("budget")} style={{ width: 120 }} /> <span className="faint">ADA per</span> <select aria-label="Budget period" value={f.period} onChange={set("period")}><option value="day">day</option><option value="week">week</option><option value="month">30 days</option></select></>)}
+          {field("budget", "Budget", <><input id="budget" value={f.budget} onChange={set("budget")} style={{ width: 120 }} /> <span className="faint">ADA per</span> <select aria-label="Budget period" value={f.period} onChange={(e) => { setPeriodTouched(true); set("period")(e); }}><option value="day">day</option><option value="week">week</option><option value="month">30 days</option></select></>)}
           {field("newPayee", "Approved payees", (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {f.payees.map((p) => (

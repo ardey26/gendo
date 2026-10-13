@@ -5,20 +5,26 @@ import {
 } from "../../../sdk/src/core/index.ts";
 import { readVault, type Get } from "../../../sdk/src/read/index.ts";
 import type { Net } from "./types.ts";
+import { session } from "./api.ts";
 
 const base = () => `${location.origin}/chain`;
-// Sent as project_id to our proxy (which adds the real key): tells it to skip its cache.
+// Sent as project_id to our proxy (which adds the real Blockfrost key): a signed-in owner's session
+// token, so the proxy skips its cache for owners building txs. Before sign-in: cached reads.
+const pid = () => session.get()?.token ?? "anonymous";
 
 export async function openChain(net: Net): Promise<LucidEvolution> {
   let l: LucidEvolution;
   if (net === "Custom") {
     const g = (await (await fetch(`${base()}/genesis`)).json()) as { system_start: number; slot_length: number };
     SLOT_CONFIG_NETWORK.Custom = { zeroTime: g.system_start * 1000, zeroSlot: 0, slotLength: g.slot_length * 1000 };
-    l = await Lucid(withRetries(new Blockfrost(base(), "no-cache")), "Custom");
-  } else l = await connect({ network: net, blockfrostUrl: base(), blockfrostProjectId: "no-cache" });
+    l = await Lucid(withRetries(new Blockfrost(base(), pid())), "Custom");
+  } else l = await connect({ network: net, blockfrostUrl: base(), blockfrostProjectId: pid() });
   owner.setOwnerTxTtl(owner.offlineTtlMs(net)); // owners sign on their own time; devnets have a horizon of minutes
   return l;
 }
+
+/** After sign-in, read through the session so the proxy serves fresh data. */
+export const readThroughSession = (l: LucidEvolution) => l.switchProvider(withRetries(new Blockfrost(base(), pid())));
 
 export const vaultFromId = (vaultId: string): Vault => {
   const id = parseVaultId(vaultId);
@@ -46,7 +52,7 @@ export async function inputsOf(l: LucidEvolution, cbor: string, net: Net): Promi
 }
 
 export async function livenessOf(l: LucidEvolution, cbor: string): Promise<Liveness> {
-  const q = blockfrostQuery(base(), "no-cache");
+  const q = blockfrostQuery(base(), pid());
   return liveness(q, txFacts(l, cbor), (await q.tipMs()) ?? Date.now(), async (txHash, index) => {
     const [o] = await l.utxosByOutRef([{ txHash, outputIndex: index }]);
     if (!o) return undefined;
@@ -55,7 +61,7 @@ export async function livenessOf(l: LucidEvolution, cbor: string): Promise<Liven
 }
 
 const get: Get = async (path) => {
-  const r = await fetch(`${base()}${path}`, { headers: { project_id: "no-cache" } });
+  const r = await fetch(`${base()}${path}`, { headers: { project_id: pid() } });
   if (r.status === 404) return undefined;
   if (!r.ok) throw new Error("The chain is unavailable right now. Try again in a minute.");
   return r.json();

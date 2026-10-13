@@ -1,5 +1,5 @@
 // A proposal's recipe: what to build, so any required signer can rebuild it when it goes stale.
-import type { AllowanceDatum } from "../../../sdk/src/core/index.ts";
+import type { AllowanceDatum, Explanation } from "../../../sdk/src/core/index.ts";
 import type { Grant } from "../../../sdk/src/core/owner.ts";
 import { listAllowances, owner, readAllowance, readConfig, treasuryUtxos, type LucidEvolution, type TxSignBuilder, type Vault } from "../../../sdk/src/core/index.ts";
 
@@ -74,5 +74,26 @@ export function titleOf(r: Recipe, labels: Record<string, string>): string {
     case "grant": return "Add an agent";
     case "revoke": return `Revoke ${n(r.unit)}`;
     case "fund": return "Fund the treasury";
+  }
+}
+
+/** Rebuild only what the dead item was: the recipe's op (and allowance) must match what its tx changed. */
+export function recipeMatches(r: Recipe, e: Explanation): boolean {
+  const c = e.changes;
+  switch (r.op) {
+    case "pause":
+      return c.length === 1 && c[0]!.kind === "config" && c[0]!.after?.paused === true;
+    case "unpause":
+      return c.length === 1 && c[0]!.kind === "config" && c[0]!.after?.paused === false;
+    case "config":
+      return c.length === 1 && c[0]!.kind === "config";
+    case "edit":
+      return c.length === 1 && c[0]!.kind === "edit" && c[0]!.unit === r.unit;
+    case "revoke":
+      return c.length === 1 && c[0]!.kind === "revoke" && c[0]!.unit === r.unit;
+    case "grant":
+      return c.length === 1 && c[0]!.kind === "grant";
+    case "fund":
+      return c.length === 0 && Object.keys(e.leavesVault).length === 0;
   }
 }

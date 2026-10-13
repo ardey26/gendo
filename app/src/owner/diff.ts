@@ -7,9 +7,12 @@ export type Row = { k: string; now: string; next: string; changed: boolean };
 export type Detail = { kind: "Change" | "Agent request"; title: string; summary: string; rows: Row[]; before?: string; after?: string; money: { label: string; value: string }[]; warnings: string[] };
 export type Ctx = {
   viewer: string;
+  /** The vault's own address: the only address whose funds are the vault's. */
+  vaultAddress: string;
   labels: Record<string, string>;
   payeesOf: (d: AllowanceDatum) => string[];
   isMine: (address: string) => boolean;
+  /** For titles only; review rows always show addresses and keys in full. */
   short: (s: string) => string;
   recipe?: { intentId?: string; purpose?: string; reason?: string } | null;
 };
@@ -37,14 +40,14 @@ function allowanceRows(a: AllowanceDatum | null, b: AllowanceDatum | null, ctx: 
     ["Payees", (d: AllowanceDatum) => String(ctx.payeesOf(d).length)],
     ["Expires", (d: AllowanceDatum) => day(d.expiresAt)],
     ["Max fee", (d: AllowanceDatum) => `${ada(d.maxFee)} ADA`],
-    ["Agent key", (d: AllowanceDatum) => ctx.short(d.agent)],
+    ["Agent key", (d: AllowanceDatum) => d.agent],
   ].map(([k, f]) => {
     const now = v(a, f as (d: AllowanceDatum) => string);
     const next = v(b, f as (d: AllowanceDatum) => string);
     return { k: k as string, now, next, changed: now !== next };
   });
-  for (const x of pb.filter((x) => !pa.includes(x))) rows.push({ k: "Payee added", now: "—", next: ctx.short(x), changed: true });
-  for (const x of pa.filter((x) => !pb.includes(x))) rows.push({ k: "Payee removed", now: ctx.short(x), next: "—", changed: true });
+  for (const x of pb.filter((x) => !pa.includes(x))) rows.push({ k: "Payee added", now: "—", next: x, changed: true });
+  for (const x of pa.filter((x) => !pb.includes(x))) rows.push({ k: "Payee removed", now: x, next: "—", changed: true });
   return rows;
 }
 
@@ -61,8 +64,8 @@ function configRows(a: ConfigDatum | null, b: ConfigDatum | null, ctx: Ctx): Row
   });
   const oa = a?.owners ?? [];
   const ob = b?.owners ?? [];
-  for (const o of ob.filter((o) => !oa.includes(o))) rows.push({ k: "Owner added", now: "—", next: ctx.short(o), changed: true });
-  for (const o of oa.filter((o) => !ob.includes(o))) rows.push({ k: "Owner removed", now: ctx.short(o), next: "—", changed: true });
+  for (const o of ob.filter((o) => !oa.includes(o))) rows.push({ k: "Owner added", now: "—", next: o, changed: true });
+  for (const o of oa.filter((o) => !ob.includes(o))) rows.push({ k: "Owner removed", now: o, next: "—", changed: true });
   return rows;
 }
 
@@ -70,9 +73,9 @@ export function detailOf(e: Explanation, ctx: Ctx): Detail {
   const name = (unit: string) => ctx.labels[unit] ?? `agent ${ctx.short(unit.slice(56))}`;
   const money: Detail["money"] = [];
   if (Object.keys(e.leavesVault).length) money.push({ label: "Leaves the vault", value: qty(e.leavesVault) });
-  const vaultAddrs = new Set(e.flows.filter((f) => Object.values(f.delta).some((n) => n < 0n) && !ctx.isMine(f.address) && f.address.startsWith("addr_test1w")).map((f) => f.address));
+  const isVault = (a: string) => a === ctx.vaultAddress;
   for (const f of e.flows)
-    if (!ctx.isMine(f.address) && !vaultAddrs.has(f.address) && (f.delta.lovelace ?? 0n) > 0n) money.push({ label: `To ${ctx.short(f.address)}`, value: qty(f.delta) });
+    if (!ctx.isMine(f.address) && !isVault(f.address) && (f.delta.lovelace ?? 0n) > 0n) money.push({ label: `To ${f.address}`, value: qty(f.delta) });
   const mine = e.flows.filter((f) => ctx.isMine(f.address)).reduce((n, f) => n - (f.delta.lovelace ?? 0n), 0n);
   if (mine > 0n) money.push({ label: "From your wallet", value: `${ada(mine)} ADA` });
   const out = (d: Omit<Detail, "money" | "warnings">): Detail => ({ ...d, money, warnings: e.warnings });
@@ -80,11 +83,11 @@ export function detailOf(e: Explanation, ctx: Ctx): Detail {
   const spend = e.changes.find((c) => c.kind === "spend");
   if (spend && spend.kind === "spend") {
     const cap = spend.before && lov(spend.before);
-    const paid = e.flows.filter((f) => !vaultAddrs.has(f.address) && (f.delta.lovelace ?? 0n) > 0n);
+    const paid = e.flows.filter((f) => !isVault(f.address) && (f.delta.lovelace ?? 0n) > 0n);
     const amount = paid.reduce((n, f) => n + (f.delta.lovelace ?? 0n), 0n);
     const over = cap ? amount > cap.txCap : false;
     const rows: Row[] = [
-      ...paid.map((f) => ({ k: "Payee", now: ctx.short(f.address), next: spend.before && ctx.payeesOf(spend.before).includes(f.address) ? "approved payee" : "not on the agent's list", changed: false })),
+      ...paid.map((f) => ({ k: "Payee", now: f.address, next: spend.before && ctx.payeesOf(spend.before).includes(f.address) ? "approved payee" : "not on the agent's list", changed: false })),
       { k: "Amount", now: `${ada(amount)} ADA`, next: over && cap ? `over the ${ada(cap.txCap)} ADA cap` : "within the per-payment cap", changed: over },
       { k: "Fee", now: `${ada(e.fee)} ADA`, next: "from the allowance", changed: false },
     ];
@@ -127,5 +130,5 @@ export function detailOf(e: Explanation, ctx: Ctx): Detail {
   if (revoke && revoke.kind === "revoke")
     return out({ kind: "Change", title: `Revoke ${name(revoke.unit)}`, summary: `Revokes ${name(revoke.unit)}: it can no longer pay. Its ${ada(revoke.lovelace)} ADA goes back to the treasury.`, rows: [{ k: name(revoke.unit), now: "active", next: "revoked", changed: true }] });
   if (Object.keys(e.leavesVault).length) return out({ kind: "Change", title: "Pay from the treasury", summary: `Pays ${qty(e.leavesVault)} out of the treasury.`, rows: [] });
-  return out({ kind: "Change", title: e.flows.some((f) => f.address.startsWith("addr_test1w") && (f.delta.lovelace ?? 0n) > 0n) ? "Fund the treasury" : "Transaction", summary: "Moves no vault funds out.", rows: [] });
+  return out({ kind: "Change", title: e.flows.some((f) => isVault(f.address) && (f.delta.lovelace ?? 0n) > 0n) ? "Fund the treasury" : "Transaction", summary: "Moves no vault funds out.", rows: [] });
 }
