@@ -41,7 +41,8 @@ TEXT=$(node "$ROOT/app/test/cdp.mjs" "http://localhost:8799/w/$POLICY")
 grep -q "E2E payouts" <<<"$TEXT" && ok "listing name shown" || fail "no name: $TEXT"
 grep -q "This agent can pay up to 10 ADA at a time and 25 ADA per day, only to this address" <<<"$TEXT" && ok "limits as a sentence" || fail "no sentence: $TEXT"
 grep -q "Active. Changes need 2 of 2 owners." <<<"$TEXT" && ok "status and threshold" || fail "no status: $TEXT"
-grep -q ': 4 ADA for "hosting, October" (as recorded by the agent)' <<<"$TEXT" && ok "payment with its purpose" || fail "no payment: $TEXT"
+grep -qE ': 4 ADA to 1 payee \+ [0-9.]+ ADA fee, paid by the agent within its limits' <<<"$TEXT" && ok "payment from the chain: amount, fee, agent spend" || fail "no payment: $TEXT"
+grep -q "The agent's note (not verified): hosting, October" <<<"$TEXT" && ok "the agent's note, marked unverified" || fail "no note: $TEXT"
 TEXT=$(node "$ROOT/app/test/cdp.mjs" "http://localhost:8799/w/$(printf 'ab%.0s' $(seq 1 28))")
 grep -q "No vault found" <<<"$TEXT" && ok "unknown id: no vault found" || fail "unknown id: $TEXT"
 BLOCKFROST_URL=http://127.0.0.1:9 BLOCKFROST_PROJECT_ID=devnet DB=$T/db.sqlite STATIC_DIR="$ROOT/app/dist" PORT=8798 "$ROOT/server/gendo-server" 2>/dev/null &

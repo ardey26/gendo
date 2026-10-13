@@ -5,8 +5,9 @@
 import type { ConfigDatum } from "../core/data.js";
 import type { Intent } from "../core/intent.js";
 import { utf8ToHex } from "../core/bytes.js";
-import { floorDiv, unitOf } from "../core/limits.js";
+import { floorDiv, unitOf, wellFormedProblems } from "../core/limits.js";
 import { addressToBech32, allowanceFromCbor, configFromCbor, scriptAddress, type ReadNetwork } from "./decode.js";
+import { decodePlutusData } from "./plutus-cbor.js";
 
 export type Get = (path: string) => Promise<unknown | undefined>;
 export type CapView = { unit: string; perPayment: bigint; perPeriod: bigint; spentThisPeriod: bigint; leftThisPeriod: bigint };
@@ -14,7 +15,7 @@ export type AllowanceView = {
   unit: string;
   txHash: string;
   lovelace: bigint;
-  status: "active" | "expired" | "not started" | "malformed";
+  status: "active" | "paused" | "expired" | "not started" | "malformed";
   agent?: string;
   caps: CapView[];
   payees: string[];
@@ -27,9 +28,15 @@ export type VaultView = { policy: string; address: string; config: ConfigDatum |
 export type PaymentView = {
   txHash: string;
   time: number;
-  kind: "agent" | "co-signed" | "owner";
+  /** From the vault redeemer on chain; "unknown" when it couldn't be read. */
+  kind: "agent" | "co-signed" | "owner" | "unknown";
+  /** Agent-written metadata: a claim, not a control. */
   purpose?: string;
   intentId?: string;
+  fee: bigint;
+  /** The allowance's ADA after this tx minus before (a payment is negative, fee included). */
+  allowanceDelta: bigint;
+  /** Who was paid: agent and co-signed spends only (an owner tx's other outputs are the owner's own change). */
   payees: { address: string; lovelace: bigint }[];
 };
 
@@ -48,6 +55,8 @@ async function utxosAt(get: Get, address: string): Promise<BfUtxo[]> {
   return out;
 }
 
+const MAX_DATE_MS = 8_640_000_000_000_000n; // the largest time a JS Date can show
+
 function allowanceView(u: BfUtxo, unit: string, network: ReadNetwork, now: bigint): AllowanceView {
   const base = { unit, txHash: u.tx_hash, lovelace: qty(u.amount, "lovelace"), caps: [], payees: [] };
   let d;
@@ -57,6 +66,11 @@ function allowanceView(u: BfUtxo, unit: string, network: ReadNetwork, now: bigin
   } catch {
     return { ...base, status: "malformed" };
   }
+  // Minting doesn't check the datum; only an agent spend does. A datum the validator would
+  // refuse (or with dates no clock can show) is unspendable, so say so instead of "active".
+  const inRange = (t: bigint) => t > -MAX_DATE_MS && t < MAX_DATE_MS;
+  if (wellFormedProblems(d).length || !inRange(d.windowStart) || !inRange(d.expiresAt) || !inRange(d.windowStart + d.periodMs * 2n))
+    return { ...base, status: "malformed" };
   const started = now >= d.windowStart;
   const k = started && d.periodMs > 0n ? floorDiv(now - d.windowStart, d.periodMs) : 0n;
   return {
@@ -75,7 +89,7 @@ function allowanceView(u: BfUtxo, unit: string, network: ReadNetwork, now: bigin
   };
 }
 
-/** The vault at `policy`, or undefined when nothing is at its address. */
+/** The vault at `policy`, or undefined when its config token isn't at its address. */
 export async function readVault(get: Get, policy: string, network: ReadNetwork, nowMs: number): Promise<VaultView | undefined> {
   const address = scriptAddress(policy, network);
   const utxos = await utxosAt(get, address);
@@ -83,11 +97,13 @@ export async function readVault(get: Get, policy: string, network: ReadNetwork, 
   const configUnit = policy + utf8ToHex("config");
   const now = BigInt(nowMs);
   let config: ConfigDatum | null = null;
+  let hasConfig = false;
   let treasuryLovelace = 0n;
   const allowances: AllowanceView[] = [];
   for (const u of utxos) {
     const vaultUnits = u.amount.filter((a) => a.unit.startsWith(policy) && a.unit !== "lovelace");
     if (vaultUnits.some((a) => a.unit === configUnit)) {
+      hasConfig = true;
       try {
         config = configFromCbor(u.inline_datum ?? "");
       } catch {
@@ -96,11 +112,43 @@ export async function readVault(get: Get, policy: string, network: ReadNetwork, 
     } else if (vaultUnits.length === 1 && vaultUnits[0]!.quantity === "1") allowances.push(allowanceView(u, vaultUnits[0]!.unit, network, now));
     else if (vaultUnits.length === 0) treasuryLovelace += qty(u.amount, "lovelace");
   }
+  if (!hasConfig) return undefined;
+  if (config?.paused) for (const a of allowances) if (a.status === "active") a.status = "paused";
   return { policy, address, config, treasuryLovelace, allowances };
 }
 
-// `collateral` marks the collateral-return output: it goes back to the submitter, it isn't a payment.
-type BfTxUtxos = { inputs: { tx_hash: string; amount: BfAmount[] }[]; outputs: { address: string; amount: BfAmount[]; collateral?: boolean }[] };
+// Blockfrost flags reference and collateral inputs, and the collateral-return output: none of
+// them is part of what the tx did to the allowance.
+type BfIn = { tx_hash: string; output_index: number; amount: BfAmount[]; reference?: boolean; collateral?: boolean };
+type BfTxUtxos = { inputs: BfIn[]; outputs: { address: string; amount: BfAmount[]; collateral?: boolean }[] };
+type BfRedeemer = { tx_index: number; purpose: string; redeemer_data_hash: string };
+const KINDS = ["agent", "co-signed", "owner"] as const; // SpendRedeemer constructors 0, 1, 2
+
+/** The vault redeemer on the allowance input: the ledger indexes spend redeemers by sorted input. */
+async function spendKind(get: Get, txHash: string, io: BfTxUtxos, input: BfIn): Promise<PaymentView["kind"]> {
+  const spends = io.inputs
+    .filter((x) => !x.reference && !x.collateral)
+    .sort((a, b) => (a.tx_hash < b.tx_hash ? -1 : a.tx_hash > b.tx_hash ? 1 : a.output_index - b.output_index));
+  const index = spends.indexOf(input);
+  const r = ((await get(`/txs/${txHash}/redeemers`)) as BfRedeemer[] | undefined)?.find((x) => x.purpose === "spend" && x.tx_index === index);
+  const datum = r && ((await get(`/scripts/datum/${r.redeemer_data_hash}/cbor`)) as { cbor: string } | undefined);
+  try {
+    const c = datum && decodePlutusData(datum.cbor);
+    if (c && c.k === "constr" && c.index < KINDS.length) return KINDS[c.index]!;
+  } catch {
+    // unreadable redeemer: fall through
+  }
+  return "unknown";
+}
+
+function readIntent(meta: { label: string; json_metadata: { j?: string[] } }[] | undefined): Partial<Intent> | undefined {
+  try {
+    const j = meta?.find((m) => m.label === "7041")?.json_metadata.j;
+    return j ? (JSON.parse(j.join("")) as Partial<Intent>) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /** Newest first: each tx that spent this allowance, back to (not including) the grant. */
 export async function allowanceHistory(get: Get, unit: string, vaultAddress: string, fromTx: string, lookback = 20): Promise<PaymentView[]> {
@@ -108,24 +156,27 @@ export async function allowanceHistory(get: Get, unit: string, vaultAddress: str
   let cur: string | undefined = fromTx;
   for (let i = 0; cur && i < lookback; i++) {
     const io = (await get(`/txs/${cur}/utxos`)) as BfTxUtxos | undefined;
-    const prev = io?.inputs.find((x) => x.amount.some((a) => a.unit === unit));
+    const prev = io?.inputs.find((x) => !x.reference && !x.collateral && x.amount.some((a) => a.unit === unit));
     if (!io || !prev) break; // the grant mints the token: nothing older to show
-    const meta = (await get(`/txs/${cur}/metadata`)) as { label: string; json_metadata: { j?: string[] } }[] | undefined;
-    let intent: Partial<Intent> | undefined;
-    try {
-      const j = meta?.find((m) => m.label === "7041")?.json_metadata.j;
-      intent = j ? (JSON.parse(j.join("")) as Partial<Intent>) : undefined;
-    } catch {
-      intent = undefined;
-    }
-    const tx = (await get(`/txs/${cur}`)) as { block_time: number } | undefined;
+    const [meta, tx, kind] = await Promise.all([
+      get(`/txs/${cur}/metadata`) as Promise<{ label: string; json_metadata: { j?: string[] } }[] | undefined>,
+      get(`/txs/${cur}`) as Promise<{ block_time: number; fees?: string } | undefined>,
+      spendKind(get, cur, io, prev),
+    ]);
+    const intent = readIntent(meta);
+    const after = io.outputs.find((o) => !o.collateral && o.address === vaultAddress && o.amount.some((a) => a.unit === unit));
     out.push({
       txHash: cur,
       time: (tx?.block_time ?? 0) * 1000,
-      kind: intent?.kind === "agent_spend" ? "agent" : intent?.kind === "co_signed_spend" ? "co-signed" : "owner",
-      ...(intent?.purpose !== undefined ? { purpose: intent.purpose } : {}),
-      ...(intent?.id !== undefined ? { intentId: intent.id } : {}),
-      payees: io.outputs.filter((o) => !o.collateral && o.address !== vaultAddress).map((o) => ({ address: o.address, lovelace: qty(o.amount, "lovelace") })),
+      kind,
+      ...(intent?.purpose !== undefined ? { purpose: String(intent.purpose) } : {}),
+      ...(intent?.id !== undefined ? { intentId: String(intent.id) } : {}),
+      fee: BigInt(tx?.fees ?? "0"),
+      allowanceDelta: (after ? qty(after.amount, "lovelace") : 0n) - qty(prev.amount, "lovelace"),
+      payees:
+        kind === "agent" || kind === "co-signed"
+          ? io.outputs.filter((o) => !o.collateral && o.address !== vaultAddress).map((o) => ({ address: o.address, lovelace: qty(o.amount, "lovelace") }))
+          : [],
     });
     cur = prev.tx_hash;
   }

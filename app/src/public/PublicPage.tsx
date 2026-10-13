@@ -1,7 +1,7 @@
 // app/src/public/PublicPage.tsx
 import { useEffect, useState } from "react";
 import { allowanceHistory, readVault, type Get, type PaymentView, type ReadNetwork, type VaultView } from "../../../sdk/src/read/index.ts";
-import { ada, allowanceSentence } from "./format.ts";
+import { ada, allowanceSentence, cleanPurpose, paymentLine } from "./format.ts";
 
 const get: Get = async (path) => {
   const r = await fetch(`/chain${path}`);
@@ -56,7 +56,7 @@ export function PublicPage({ policy, network }: { policy: string; network: ReadN
         return (
           <section key={a.unit}>
             <p>{allowanceSentence(a)}</p>
-            {a.status !== "malformed" && <p>Status: {a.status}.</p>}
+            {a.status !== "malformed" && <p>Status: {a.status === "paused" ? "paused (the vault is paused)" : a.status}.</p>}
             {l && a.status === "active" && (
               <p>
                 {ada(l.leftThisPeriod)} of {ada(l.perPeriod)} ADA left this period, resets {new Date(a.periodEndsAt!).toISOString().replace("T", " ").slice(0, 16)} UTC.
@@ -70,9 +70,12 @@ export function PublicPage({ policy, network }: { policy: string; network: ReadN
       <ul>
         {history.map((p) => (
           <li key={p.txHash}>
-            {new Date(p.time).toISOString().slice(0, 10)}: {p.payees.map((x) => `${ada(x.lovelace)} ADA`).join(", ")}
-            {p.purpose ? ` for "${p.purpose}" (as recorded by the agent)` : ""}
-            {p.kind === "co-signed" ? ", approved by owners" : p.kind === "owner" ? ", owner change" : ""}
+            {new Date(p.time).toISOString().slice(0, 10)}: {paymentLine(p)}.
+            {p.purpose && cleanPurpose(p.purpose) && (
+              <blockquote>
+                <small>The agent's note (not verified):</small> {cleanPurpose(p.purpose)}
+              </blockquote>
+            )}
           </li>
         ))}
       </ul>

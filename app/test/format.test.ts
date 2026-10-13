@@ -1,6 +1,6 @@
 // app/test/format.test.ts
 import { describe, expect, it } from "vitest";
-import { ada, allowanceSentence, parsePolicy, periodName } from "../src/public/format.ts";
+import { ada, allowanceSentence, cleanPurpose, parsePolicy, paymentLine, periodName } from "../src/public/format.ts";
 
 describe("format", () => {
   it("parses /w/<policy> and rejects anything else", () => {
@@ -22,5 +22,19 @@ describe("format", () => {
   });
   it("says so for a malformed allowance", () => {
     expect(allowanceSentence({ unit: "u", txHash: "t", lovelace: 0n, status: "malformed", payees: [], caps: [] })).toBe("Malformed: the agent can't spend it, and owners can reclaim it.");
+  });
+  const row = { txHash: "t", time: 0, payees: [{ address: "a", lovelace: 4_000_000n }], fee: 367_842n, allowanceDelta: -4_367_842n };
+  it("describes a payment from what the chain says, fee included", () => {
+    expect(paymentLine({ ...row, kind: "agent" })).toBe("4 ADA to 1 payee + 0.367842 ADA fee, paid by the agent within its limits");
+    expect(paymentLine({ ...row, kind: "co-signed", payees: [{ address: "a", lovelace: 1n }, { address: "b", lovelace: 2n }] })).toBe("0.000003 ADA to 2 payees + 0.367842 ADA fee, approved by owners");
+  });
+  it("describes an owner change by what it did to the allowance, not by the owner's change output", () => {
+    expect(paymentLine({ ...row, kind: "owner", payees: [], allowanceDelta: 10_000_000n })).toBe("Owner change: allowance +10 ADA");
+    expect(paymentLine({ ...row, kind: "owner", payees: [], allowanceDelta: -30_000_000n })).toBe("Owner change: allowance -30 ADA");
+    expect(paymentLine({ ...row, kind: "unknown", payees: [], allowanceDelta: -1_500_000n })).toBe("Allowance -1.5 ADA");
+  });
+  it("cleans the agent's note: no control or direction characters, bounded length", () => {
+    expect(cleanPurpose("hosting\u202e, October\n\u0000 ")).toBe("hosting, October");
+    expect(cleanPurpose("x".repeat(500))).toBe("x".repeat(120) + "…");
   });
 });

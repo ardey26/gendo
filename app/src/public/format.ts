@@ -1,5 +1,5 @@
 // app/src/public/format.ts
-import type { AllowanceView } from "../../../sdk/src/read/index.ts";
+import type { AllowanceView, PaymentView } from "../../../sdk/src/read/index.ts";
 
 export const parsePolicy = (path: string): string | undefined => /^\/w\/([0-9a-f]{56})\/?$/.exec(path)?.[1];
 
@@ -23,4 +23,21 @@ export function allowanceSentence(a: AllowanceView): string {
   const n = a.payees.length;
   const limits = l ? `up to ${ada(l.perPayment)} ADA at a time and ${ada(l.perPeriod)} ADA per ${periodName(a.periodMs!)}` : "nothing (no ADA limit is set)";
   return `This agent can pay ${limits}, only to ${n === 1 ? "this address" : `these ${n} addresses`}, until ${date(a.expiresAt!)}.`;
+}
+
+const signedAda = (lovelace: bigint) => `${lovelace < 0n ? "-" : "+"}${ada(lovelace < 0n ? -lovelace : lovelace)}`;
+
+/** One history row, from what the chain says (the redeemer, outputs and fee), never from the agent's note. */
+export function paymentLine(p: PaymentView): string {
+  if (p.kind === "owner") return `Owner change: allowance ${signedAda(p.allowanceDelta)} ADA`;
+  if (p.kind === "unknown") return `Allowance ${signedAda(p.allowanceDelta)} ADA`;
+  const paid = p.payees.reduce((n, x) => n + x.lovelace, 0n);
+  const who = p.kind === "agent" ? "paid by the agent within its limits" : "approved by owners";
+  return `${ada(paid)} ADA to ${p.payees.length} ${p.payees.length === 1 ? "payee" : "payees"} + ${ada(p.fee)} ADA fee, ${who}`;
+}
+
+/** The agent's note is untrusted text: drop control and direction characters, cap its length. */
+export function cleanPurpose(s: string): string {
+  const t = s.replace(/\p{Cc}/gu, " ").replace(/\p{Cf}/gu, "").replace(/\s+/g, " ").trim();
+  return t.length > 120 ? t.slice(0, 120) + "…" : t;
 }

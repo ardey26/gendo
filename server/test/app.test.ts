@@ -52,6 +52,46 @@ describe("chain proxy", () => {
   });
 });
 
+describe("chain proxy limits", () => {
+  const ok = async () => new Response("[]", { status: 200 });
+  const script = "addr_test1wrkxfunr68mzu72j9v44sukw8k35awymwk6v2ghudau3rnca6a4lh";
+  it("reads only vault (script) addresses", async () => {
+    const app = createApp({ store: store(), upstream: ok });
+    expect((await app.request(`/chain/addresses/${script}/utxos`)).status).toBe(200);
+    expect((await app.request("/chain/addresses/addr_test1vq9jmx22305ltuwma9kmz2vcgde7rvydaynfxwqvfrypp9c97slgs/utxos")).status).toBe(404);
+  });
+  it("allows the redeemer reads the history needs", async () => {
+    const app = createApp({ store: store(), upstream: ok });
+    expect((await app.request("/chain/txs/" + "a".repeat(64) + "/redeemers")).status).toBe(200);
+    expect((await app.request("/chain/scripts/datum/" + "b".repeat(64) + "/cbor")).status).toBe(200);
+  });
+  it("refuses paging outside page 1..20, count 1..100, order asc|desc", async () => {
+    const app = createApp({ store: store(), upstream: ok });
+    for (const q of ["page=21", "page=0", "count=101", "count=abc", "order=random"])
+      expect((await app.request(`/chain/addresses/${script}/utxos?${q}`)).status).toBe(400);
+    expect((await app.request(`/chain/addresses/${script}/utxos?page=20&count=100&order=desc`)).status).toBe(200);
+  });
+  it("doesn't cache a large response", async () => {
+    let calls = 0;
+    const app = createApp({ store: store(), upstream: async () => (calls++, new Response("x".repeat(300_000), { status: 200 })) });
+    await app.request("/chain/txs/" + "e".repeat(64)); await app.request("/chain/txs/" + "e".repeat(64));
+    expect(calls).toBe(2);
+  });
+  it("rate-limits each client", async () => {
+    const app = createApp({ store: store(), upstream: ok, perMinute: 3, clientIp: (c) => c.req.header("x-ip") ?? "?" });
+    const hit = (ip: string) => app.request("/chain/blocks/latest", { headers: { "x-ip": ip } });
+    for (let i = 0; i < 3; i++) expect((await hit("1.1.1.1")).status).toBe(200);
+    expect((await hit("1.1.1.1")).status).toBe(429);
+    expect((await hit("2.2.2.2")).status).toBe(200);
+  });
+  it("retries a failed read once", async () => {
+    let calls = 0;
+    const app = createApp({ store: store(), upstream: async () => (++calls === 1 ? new Response("", { status: 503 }) : new Response("{}", { status: 200 })) });
+    expect((await app.request("/chain/blocks/latest")).status).toBe(200);
+    expect(calls).toBe(2);
+  });
+});
+
 describe("public listing", () => {
   it("returns a registered vault's name and listed flag", async () => {
     const s = store();

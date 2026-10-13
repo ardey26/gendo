@@ -153,23 +153,91 @@ describe("vault state from the chain", () => {
     const v = await readVault(fakeGet([cfgUtxo]), policy, "Preprod", Number(t0));
     expect(v!.allowances).toEqual([]);
   });
+  it("funds at the address without the config token are not a vault", async () => {
+    expect(await readVault(fakeGet([utxo("e0".repeat(32), { lovelace: "150000000" }, null)]), policy, "Preprod", Number(t0))).toBeUndefined();
+  });
+  it("a datum that decodes but breaks the on-chain rules is malformed, not active", async () => {
+    const bad = { ...allowance(0n, t0), caps: [{ policy: "", name: "", windowCap: 5_000_000n, txCap: 10_000_000n }] };
+    const far = { ...allowance(0n, t0), expiresAt: 2n ** 70n };
+    for (const d of [bad, far]) {
+      const v = await readVault(fakeGet([cfgUtxo, utxo("a1".repeat(32), { lovelace: "60000000", [unitA]: "1" }, allowanceToData(d))]), policy, "Preprod", Number(t0));
+      expect(v!.allowances[0]!.status).toBe("malformed");
+    }
+  });
+  it("in a paused vault, an agent within its dates reads paused", async () => {
+    const paused = utxo("c0".repeat(32), { lovelace: "2000000", [policy + utf8ToHex("config")]: "1" }, configToData({ ...cfg, paused: true }));
+    const v = await readVault(fakeGet([paused, utxo("a1".repeat(32), { lovelace: "60000000", [unitA]: "1" }, allowanceToData(allowance(0n, t0)))]), policy, "Preprod", Number(t0 + 1n));
+    expect(v!.allowances[0]!.status).toBe("paused");
+  });
   it("nothing at the address is no vault", async () => {
     expect(await readVault(async () => undefined, policy, "Preprod", Number(t0))).toBeUndefined();
   });
 
-  it("walks an allowance's history back to its grant, with each intent's purpose", async () => {
-    const payee = addressToBech32({ payment: { type: "Key", hash: h(4) }, stake: null }, "Preprod");
-    const intent = { v: 1, id: "INV-1", kind: "agent_spend", purpose: "hosting" };
-    const j = JSON.stringify(intent).match(/.{1,64}/g)!;
-    const get: Get = async (path) => {
-      if (path === "/txs/" + "b2".repeat(32) + "/utxos")
-        return { inputs: [{ tx_hash: "b1".repeat(32), output_index: 0, amount: [{ unit: unitA, quantity: "1" }] }], outputs: [{ address: payee, amount: [{ unit: "lovelace", quantity: "4000000" }] }, { address: addr, amount: [{ unit: unitA, quantity: "1" }] }, { address: "addr_test1vqagentcollateralreturn", collateral: true, amount: [{ unit: "lovelace", quantity: "9448236" }] }] };
-      if (path === "/txs/" + "b2".repeat(32) + "/metadata") return [{ label: "7041", json_metadata: { h: "00", j } }];
-      if (path === "/txs/" + "b2".repeat(32)) return { block_time: 1_790_000_100 };
-      if (path === "/txs/" + "b1".repeat(32) + "/utxos") return { inputs: [{ tx_hash: "ff".repeat(32), output_index: 0, amount: [{ unit: "lovelace", quantity: "9" }] }], outputs: [] };
-      return undefined;
+  // History: what each tx did comes from the chain (redeemer, fee, allowance value);
+  // only the purpose and intent id come from the agent-written metadata.
+  const payee = addressToBech32({ payment: { type: "Key", hash: h(4) }, stake: null }, "Preprod");
+  const ownerWallet = addressToBech32({ payment: { type: "Key", hash: h(1) }, stake: null }, "Preprod");
+  const redeemer = (index: number) => Data.to(new Constr(index, index < 2 ? ["aa".repeat(32)] : []));
+  const lovelace = (n: number) => ({ unit: "lovelace", quantity: String(n) });
+  const allowanceAmt = (n: number) => [lovelace(n), { unit: unitA, quantity: "1" }];
+  const chain = (txs: Record<string, { utxos: unknown; redeemers?: { tx_index: number; purpose: string; redeemer_data_hash: string }[]; datums?: Record<string, string>; meta?: unknown; fees?: string; time?: number }>): Get =>
+    async (path) => {
+      const m = /^\/txs\/([0-9a-f]{64})(\/\w+)?$/.exec(path);
+      const d = /^\/scripts\/datum\/(\w+)\/cbor$/.exec(path);
+      if (d) for (const t of Object.values(txs)) if (t.datums?.[d[1]!]) return { cbor: t.datums[d[1]!] };
+      const t = m && txs[m[1]!];
+      if (!t) return undefined;
+      if (m![2] === "/utxos") return t.utxos;
+      if (m![2] === "/redeemers") return t.redeemers ?? [];
+      if (m![2] === "/metadata") return t.meta ?? [];
+      return m![2] ? undefined : { block_time: t.time ?? 1_790_000_100, fees: t.fees ?? "0" };
     };
-    const hist = await allowanceHistory(get, unitA, addr, "b2".repeat(32));
-    expect(hist).toEqual([{ txHash: "b2".repeat(32), time: 1_790_000_100_000, kind: "agent", purpose: "hosting", intentId: "INV-1", payees: [{ address: payee, lovelace: 4_000_000n }] }]);
+  const grant = { utxos: { inputs: [{ tx_hash: "ff".repeat(32), output_index: 0, amount: [lovelace(9)] }], outputs: [] } };
+
+  it("takes the kind from the redeemer, not from the agent's metadata, and counts the fee", async () => {
+    const lie = { v: 1, id: "INV-1", kind: "co_signed_spend", purpose: "hosting" };
+    const get = chain({
+      ["b2".repeat(32)]: {
+        utxos: {
+          inputs: [
+            { tx_hash: "00".repeat(32), output_index: 0, reference: true, amount: [lovelace(5)] },
+            { tx_hash: "e9".repeat(32), output_index: 0, collateral: true, amount: [lovelace(10_000_000)] },
+            { tx_hash: "a0".repeat(32), output_index: 1, amount: [lovelace(2_000_000)] },
+            { tx_hash: "b1".repeat(32), output_index: 0, amount: allowanceAmt(40_000_000) },
+          ],
+          outputs: [
+            { address: payee, amount: [lovelace(4_000_000)] },
+            { address: addr, amount: allowanceAmt(35_632_158) },
+            { address: "addr_test1vqcollateralreturn", collateral: true, amount: [lovelace(9_448_236)] },
+          ],
+        },
+        // spend inputs sorted: a0…#1 is index 0, the allowance b1…#0 is index 1
+        redeemers: [{ tx_index: 0, purpose: "spend", redeemer_data_hash: "r2" }, { tx_index: 1, purpose: "spend", redeemer_data_hash: "r0" }],
+        datums: { r0: redeemer(0), r2: redeemer(2) },
+        meta: [{ label: "7041", json_metadata: { h: "00", j: JSON.stringify(lie).match(/.{1,64}/g) } }],
+        fees: "367842",
+      },
+      ["b1".repeat(32)]: grant,
+    });
+    expect(await allowanceHistory(get, unitA, addr, "b2".repeat(32))).toEqual([
+      { txHash: "b2".repeat(32), time: 1_790_000_100_000, kind: "agent", purpose: "hosting", intentId: "INV-1", fee: 367_842n, allowanceDelta: -4_367_842n, payees: [{ address: payee, lovelace: 4_000_000n }] },
+    ]);
+  });
+
+  it("an owner change lists no payees (the owner's change isn't a payment), only the allowance's value change", async () => {
+    const get = chain({
+      ["b2".repeat(32)]: {
+        utxos: {
+          inputs: [{ tx_hash: "b1".repeat(32), output_index: 0, amount: allowanceAmt(30_000_000) }, { tx_hash: "c3".repeat(32), output_index: 0, amount: [lovelace(9_000_000_000)] }],
+          outputs: [{ address: addr, amount: allowanceAmt(40_000_000) }, { address: ownerWallet, amount: [lovelace(8_989_000_000)] }],
+        },
+        redeemers: [{ tx_index: 0, purpose: "spend", redeemer_data_hash: "r2" }],
+        datums: { r2: redeemer(2) },
+        fees: "1000000",
+      },
+      ["b1".repeat(32)]: grant,
+    });
+    const [row] = await allowanceHistory(get, unitA, addr, "b2".repeat(32));
+    expect(row).toMatchObject({ kind: "owner", payees: [], allowanceDelta: 10_000_000n });
   });
 });
