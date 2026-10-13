@@ -1,6 +1,7 @@
 // A proposal's recipe: what to build, so any required signer can rebuild it when it goes stale.
 import type { AllowanceDatum } from "../../../sdk/src/core/index.ts";
 import type { Grant } from "../../../sdk/src/core/owner.ts";
+import { listAllowances, owner, readAllowance, readConfig, treasuryUtxos, type LucidEvolution, type TxSignBuilder, type Vault } from "../../../sdk/src/core/index.ts";
 
 export type Recipe =
   | { op: "pause" }
@@ -30,5 +31,48 @@ export function decodeRecipe(x: unknown): Recipe | undefined {
     }
   } catch {
     return undefined;
+  }
+}
+
+/** Build the recipe's tx with the SDK's owner builders; the connected wallet pays the fee. */
+export async function buildRecipe(l: LucidEvolution, vault: Vault, r: Recipe, me: string): Promise<TxSignBuilder> {
+  const cfg = await readConfig(l, vault);
+  switch (r.op) {
+    case "pause":
+      return owner.pause(l, vault, cfg, [me]);
+    case "unpause":
+      return owner.unpause(l, vault, cfg, r.signers);
+    case "config":
+      return owner.updateConfig(l, vault, cfg, { ...cfg.config, owners: r.owners, threshold: r.threshold }, r.signers);
+    case "edit":
+      return owner.editAllowance(l, vault, cfg, await readAllowance(l, vault, r.unit), r.next, r.signers, r.topUp > 0n ? { lovelace: r.topUp } : {});
+    case "grant": {
+      const fromTreasury = (r.grant.fund.lovelace ?? 0n) > 0n ? await treasuryUtxos(l, vault) : undefined;
+      return (await owner.grantAllowance(l, vault, cfg, r.grant, r.signers, fromTreasury ? { fromTreasury } : {})).tx;
+    }
+    case "revoke": {
+      const al = (await listAllowances(l, vault)).find((a) => a.unit === r.unit);
+      if (!al) throw new Error("that agent's allowance isn't on chain any more");
+      return owner.revokeAllowance(l, vault, cfg, { utxo: al.utxo, unit: al.unit }, r.signers);
+    }
+    case "fund": {
+      // Funding needs no owner, but naming the funder as a signer lets it go through the inbox,
+      // which submits a fully signed tx at once (no separate submit path on the server).
+      const now = l.slotToUnixTime(l.currentSlot());
+      return l.newTx().pay.ToAddress(vault.address, { lovelace: r.lovelace }).addSignerKey(me).validTo(now + owner.offlineTtlMs(l.config().network!)).complete();
+    }
+  }
+}
+
+export function titleOf(r: Recipe, labels: Record<string, string>): string {
+  const n = (u: string) => labels[u] ?? `agent ${u.slice(56, 64)}`;
+  switch (r.op) {
+    case "pause": return "Pause all agents";
+    case "unpause": return "Unpause";
+    case "config": return "Change owners or threshold";
+    case "edit": return `Change ${n(r.unit)}`;
+    case "grant": return "Add an agent";
+    case "revoke": return `Revoke ${n(r.unit)}`;
+    case "fund": return "Fund the treasury";
   }
 }
