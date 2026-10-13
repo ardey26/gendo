@@ -14,3 +14,13 @@ export function Netband() {
     </div>
   );
 }
+
+/** A small spinner with its label, for anything that is waiting. */
+export function Spinner({ label }: { label?: string }) {
+  return (
+    <span className="busy" role="status">
+      <span className="spin" aria-hidden="true" />
+      {label}
+    </span>
+  );
+}

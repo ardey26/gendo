@@ -30,9 +30,9 @@ POLICY=$($V vault info | jq -r .policy)
 ok "vault $POLICY"
 
 echo "== server and app"
-(cd "$ROOT/app" && VITE_NETWORK=Custom npx vite build >/dev/null)
+(cd "$ROOT/app" && VITE_NETWORK=Custom npx vite build --outDir "$T/dist" --emptyOutDir >/dev/null)
 DB=$T/db.sqlite "$ROOT/server/gendo-server" admin register "$POLICY" --name "E2E payouts" >/dev/null
-BLOCKFROST_URL=$STORE BLOCKFROST_PROJECT_ID=devnet DB=$T/db.sqlite STATIC_DIR="$ROOT/app/dist" PORT=8799 "$ROOT/server/gendo-server" 2>"$T/server.log" &
+BLOCKFROST_URL=$STORE BLOCKFROST_PROJECT_ID=devnet DB=$T/db.sqlite STATIC_DIR="$T/dist" PORT=8799 "$ROOT/server/gendo-server" 2>"$T/server.log" &
 SRV=$!; trap 'kill $SRV 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do curl -sf http://localhost:8799/public/$POLICY >/dev/null && break; sleep 1; done
 
@@ -45,7 +45,7 @@ grep -qE '4 ADA to 1 payee \+ [0-9.]+ ADA fee, paid by the agent within its limi
 grep -q "The agent's note (not verified): hosting, October" <<<"$TEXT" && ok "the agent's note, marked unverified" || fail "no note: $TEXT"
 TEXT=$(node "$ROOT/app/test/cdp.mjs" "http://localhost:8799/w/$(printf 'ab%.0s' $(seq 1 28))")
 grep -q "No vault found" <<<"$TEXT" && ok "unknown id: no vault found" || fail "unknown id: $TEXT"
-BLOCKFROST_URL=http://127.0.0.1:9 BLOCKFROST_PROJECT_ID=devnet DB=$T/db.sqlite STATIC_DIR="$ROOT/app/dist" PORT=8798 "$ROOT/server/gendo-server" 2>/dev/null &
+BLOCKFROST_URL=http://127.0.0.1:9 BLOCKFROST_PROJECT_ID=devnet DB=$T/db.sqlite STATIC_DIR="$T/dist" PORT=8798 "$ROOT/server/gendo-server" 2>/dev/null &
 DEAD=$!; trap 'kill $SRV $DEAD 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do curl -s -o /dev/null http://localhost:8798/ && break; sleep 1; done
 TEXT=$(node "$ROOT/app/test/cdp.mjs" "http://localhost:8798/w/$POLICY")

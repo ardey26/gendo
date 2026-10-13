@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { LucidEvolution } from "../../../sdk/src/core/index.ts";
 import { navigate } from "../route.ts";
 import { Mark, Netband } from "../ui/Brand.tsx";
@@ -15,15 +15,34 @@ export const short = (s: string) => (s.length > 20 ? `${s.slice(0, 12)}…${s.sl
 export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [s, setS] = useState<{ data?: T; error?: string; loading: boolean }>({ loading: true });
   const [n, setN] = useState(0);
+  const quiet = useRef(false);
   useEffect(() => {
     let live = true;
-    setS((x) => ({ ...x, loading: true }));
+    // A background refresh keeps showing the current data; a first load shows "loading".
+    if (!quiet.current) setS((x) => ({ ...x, loading: true }));
+    quiet.current = false;
     fn().then((data) => live && setS({ data, loading: false }), (e) => live && setS({ error: (e as Error).message, loading: false }));
     return () => {
       live = false;
     };
   }, [...deps, n]);
-  return { ...s, reload: useCallback(() => setN((x) => x + 1), []) };
+  return {
+    ...s,
+    reload: useCallback(() => setN((x) => x + 1), []),
+    refresh: useCallback(() => {
+      quiet.current = true;
+      setN((x) => x + 1);
+    }, []),
+  };
+}
+
+/** Run `fn` every `ms` while `active`. */
+export function usePoll(fn: () => void, active: boolean, ms = 5_000) {
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(fn, ms);
+    return () => clearInterval(t);
+  }, [active, fn, ms]);
 }
 
 export function Link({ to, className, children }: { to: string; className?: string; children: ReactNode }) {

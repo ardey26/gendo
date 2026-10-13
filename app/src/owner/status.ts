@@ -28,3 +28,7 @@ export function statusOf(p: PendingView, live: Liveness | undefined, viewer: str
 
 /** Anything the explanation warns about needs a second, explicit confirm before signing. */
 export const needsConfirm = (d: Detail) => d.warnings.length > 0;
+
+/** Worth re-checking: on its way to the chain, or signed by me and waiting for the others. */
+export const inFlight = (rows: PendingView[], viewer: string) =>
+  rows.some((p) => p.status === "submitting" || p.status === "submitted" || (p.status === "open" && p.signedBy.includes(viewer)));

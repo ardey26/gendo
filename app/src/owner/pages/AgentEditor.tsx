@@ -7,6 +7,7 @@ import { buildRecipe, encodeRecipe, titleOf, type Recipe } from "../recipes.ts";
 import { agentProblems, PERIOD_MS, toLovelace, type AgentForm } from "../validate.ts";
 import { Copy, ErrorNote, Link, Shell, Signers, defaultSigners, short, useLoad, useOwner } from "../ui.tsx";
 import { partialSign } from "../wallet.ts";
+import { Spinner } from "../../ui/Brand.tsx";
 
 const periodOf = (ms: bigint): AgentForm["period"] => (ms === PERIOD_MS.week ? "week" : ms === PERIOD_MS.month ? "month" : "day");
 
@@ -149,7 +150,7 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
             )}
             <div style={{ padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
               {problems.map((p) => <ErrorNote key={p} error={p} />)}
-              {busy && <div className="note">{busy}</div>}
+              {busy && <div className="note"><Spinner label={busy} /></div>}
               {note && <div className="note">{note} <Link to="/inbox">Needs you</Link></div>}
               <ErrorNote error={err ?? loaded.error} />
             </div>

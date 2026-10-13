@@ -6,7 +6,9 @@ import { api } from "../api.ts";
 import { chainGet, readLight, vaultFromId } from "../chain.ts";
 import { buildRecipe, decodeRecipe, encodeRecipe, titleOf, type Recipe } from "../recipes.ts";
 import { toLovelace } from "../validate.ts";
-import { Copy, ErrorNote, Link, Shell, Signers, defaultSigners, short, useLoad, useOwner } from "../ui.tsx";
+import { Copy, ErrorNote, Link, Shell, Signers, defaultSigners, short, useLoad, useOwner, usePoll } from "../ui.tsx";
+import { Spinner } from "../../ui/Brand.tsx";
+import { inFlight } from "../status.ts";
 import { partialSign } from "../wallet.ts";
 
 export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "activity" | "treasury" | "settings" }) {
@@ -25,6 +27,8 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
   useEffect(() => {
     if (owners) setSigners(defaultSigners(owners, thr, o.me.pkh));
   }, [owners?.join(), thr]);
+  const waiting = !busy && inFlight(data.data?.pending ?? [], o.me.pkh);
+  usePoll(data.refresh, waiting);
   if (!mine)
     return <Shell title="Vault"><div style={{ padding: 20 }} data-ready><p>Add this vault on the <Link to="/">start page</Link> first (you need its vault id).</p></div></Shell>;
   const view = data.data?.view;
@@ -70,8 +74,8 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
         ))}
       </div>
       <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }} {...(data.loading ? {} : { "data-ready": "" })}>
-        {busy && <div className="note">{busy}</div>}
-        {note && <div className="note">{note}</div>}
+        {busy && <div className="note"><Spinner label={busy} /></div>}
+        {note && <div className="note">{waiting ? <Spinner label={note} /> : note}</div>}
         <ErrorNote error={err ?? data.error} />
         {view && tab === "agents" && (
           <section className="panel">
@@ -148,7 +152,7 @@ function Activity({ policy }: { policy: string }) {
         <table className="t" style={{ minWidth: 760 }}>
           <thead><tr><th>Time</th><th>What happened</th><th>Agent's note (not verified)</th><th>Ref</th></tr></thead>
           <tbody>
-            {(rows.data ?? []).length === 0 && <tr><td colSpan={4} className="muted">{rows.loading ? "Reading the chain…" : "No activity yet."}</td></tr>}
+            {(rows.data ?? []).length === 0 && <tr><td colSpan={4} className="muted">{rows.loading ? <Spinner label="Reading the chain…" /> : "No activity yet."}</td></tr>}
             {(rows.data ?? []).map((p) => (
               <tr key={p.txHash}><td className="mono faint">{new Date(p.time).toISOString().replace("T", " ").slice(0, 16)}</td><td>{paymentLine(p)}.</td><td>{p.purpose ? cleanPurpose(p.purpose) : "—"}</td><td className="mono faint">tx {short(p.txHash)}</td></tr>
             ))}

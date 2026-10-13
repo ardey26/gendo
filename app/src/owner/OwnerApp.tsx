@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { LucidEvolution } from "../../../sdk/src/core/index.ts";
 import type { Route } from "../route.ts";
-import { Netband } from "../ui/Brand.tsx";
+import { Netband, Spinner } from "../ui/Brand.tsx";
 import { SERVER_DOWN, api, session, type MyVault } from "./api.ts";
 import { openChain } from "./chain.ts";
 import { AgentEditor } from "./pages/AgentEditor.tsx";
@@ -62,10 +62,12 @@ export default function OwnerApp({ route, network }: { route: Route; network: Ne
     if (!me) return;
     void reloadVaults();
     void reloadInbox();
+    const t = setInterval(() => void reloadInbox(), 30_000);
+    return () => clearInterval(t);
   }, [me]);
 
   if (fatal) return <div className="app" data-error><Netband /><p style={{ padding: 20 }}>{fatal}</p></div>;
-  if (!lucid) return <div className="app"><Netband /><p style={{ padding: 20 }}>Connecting to the chain…</p></div>;
+  if (!lucid) return <div className="app"><Netband /><p style={{ padding: 20 }}><Spinner label="Connecting to the chain…" /></p></div>;
   if (!me) return <Connect onConnected={setMe} />;
   const ctx: Owner = {
     net: network, lucid, me, vaults, reloadVaults, inboxCount, reloadInbox,

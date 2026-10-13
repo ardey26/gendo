@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { parseRoute } from "./route.ts";
 import "./ui/gendo.css";
+import { Spinner } from "./ui/Brand.tsx";
 
 const network = (import.meta.env.VITE_NETWORK ?? "Preprod") as "Preprod" | "Custom";
 const PublicPage = lazy(() => import("./public/PublicPage.tsx").then((m) => ({ default: m.PublicPage })));
@@ -20,7 +21,7 @@ function App() {
   }, []);
   const route = parseRoute(path);
   return (
-    <Suspense fallback={<div className="app"><p style={{ padding: 20 }}>Loading…</p></div>}>
+    <Suspense fallback={<div className="app"><p style={{ padding: 20 }}><Spinner label="Loading…" /></p></div>}>
       {route.page === "public" ? <PublicPage policy={route.policy} network={network} /> : <OwnerApp route={route} network={network} />}
     </Suspense>
   );

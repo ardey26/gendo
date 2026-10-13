@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Mark, Netband } from "../../ui/Brand.tsx";
+import { Mark, Netband, Spinner } from "../../ui/Brand.tsx";
 import { ada } from "../../public/format.ts";
 import { ApiError, api, session } from "../api.ts";
 import { readLight } from "../chain.ts";
@@ -46,6 +46,7 @@ export function Connect({ onConnected }: { onConnected(c: Connected): void }) {
                 <span className="faint" style={{ fontSize: 12 }}>{w.installed ? "Detected" : "Not installed"}</span>
               </button>
             ))}
+            {busy && <Spinner label="Waiting for your wallet…" />}
             <ErrorNote error={err} />
           </div>
           <div className="faint" style={{ padding: "12px 20px", borderTop: "1px solid #2a241e", fontSize: 12, display: "flex", flexDirection: "column", gap: 6 }}>

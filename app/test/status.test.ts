@@ -22,3 +22,14 @@ describe("inbox status", () => {
     expect(statusOf(p({ status: "failed", error: "BadInputs" }), undefined, me, now)).toMatchObject({ label: "Failed: BadInputs", canRebuild: true });
   });
 });
+
+import { inFlight } from "../src/owner/status.ts";
+describe("polling", () => {
+  it("polls while anything is submitting, submitted, or open and already signed by me", () => {
+    expect(inFlight([p({ status: "submitted" })], me)).toBe(true);
+    expect(inFlight([p({ status: "submitting" })], me)).toBe(true);
+    expect(inFlight([p({ signedBy: [me, other] , status: "open" })], me)).toBe(true);
+    expect(inFlight([p({ status: "landed" }), p({ status: "failed" })], me)).toBe(false);
+    expect(inFlight([p({})], me)).toBe(false); // open, waiting for me: nothing changes until I act
+  });
+});

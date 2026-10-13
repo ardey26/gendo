@@ -20,8 +20,9 @@ $V treasury fund --ada 100 --payer a >/dev/null
 UNIT=$($V allowance grant --agent agent --dest "$($V keys show payee | jq -r .address)" --cap lovelace:25:10 --fund 40 --from-treasury --propose a --sign a,b | jq -rs '.[0].allowance')
 POLICY=$($V vault info | jq -r .policy); VAULT_ID=$($V vault info | jq -r .id)
 echo "  ok  devnet vault ${POLICY:0:16}… (2 of 2), one agent"
-(cd "$ROOT/app" && VITE_NETWORK=Custom VITE_TEST_WALLETS=1 npx vite build >/dev/null)
-BLOCKFROST_URL=$STORE BLOCKFROST_PROJECT_ID=devnet VAULT_NETWORK=Custom DB=$T/db.sqlite STATIC_DIR="$ROOT/app/dist" PORT=8796 "$ROOT/server/gendo-server" 2>"$T/server.log" &
+# A test build (with the test wallet) goes to its own folder: never into app/dist.
+(cd "$ROOT/app" && VITE_NETWORK=Custom VITE_TEST_WALLETS=1 npx vite build --outDir "$T/dist" --emptyOutDir >/dev/null)
+BLOCKFROST_URL=$STORE BLOCKFROST_PROJECT_ID=devnet VAULT_NETWORK=Custom DB=$T/db.sqlite STATIC_DIR="$T/dist" PORT=8796 "$ROOT/server/gendo-server" 2>"$T/server.log" &
 SRV=$!; trap 'kill $SRV 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do curl -s -o /dev/null http://localhost:8796/ && break; sleep 1; done
 APP=http://localhost:8796 VAULT_ID=$VAULT_ID POLICY=$POLICY UNIT=$UNIT KEY_A=$(cat "$VAULT_HOME/keys/a.sk") KEY_B=$(cat "$VAULT_HOME/keys/b.sk") \

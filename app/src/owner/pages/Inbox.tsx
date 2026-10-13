@@ -4,9 +4,10 @@ import { api } from "../api.ts";
 import { inputsOf, livenessOf, vaultFromId } from "../chain.ts";
 import { detailOf, type Detail } from "../diff.ts";
 import { buildRecipe, decodeRecipe, encodeRecipe, titleOf } from "../recipes.ts";
-import { needsConfirm, statusOf, type Status } from "../status.ts";
+import { inFlight, needsConfirm, statusOf, type Status } from "../status.ts";
+import { Spinner } from "../../ui/Brand.tsx";
 import type { PendingView } from "../types.ts";
-import { ErrorNote, Shell, short, useLoad, useOwner } from "../ui.tsx";
+import { ErrorNote, Shell, short, useLoad, useOwner, usePoll } from "../ui.tsx";
 import { partialSign } from "../wallet.ts";
 
 type Item = { p: PendingView; status: Status; detail?: Detail; verified: boolean; error?: string; vaultName: string };
@@ -53,6 +54,8 @@ export function Inbox() {
   useEffect(() => {
     void o.reloadInbox();
   }, [items.data]);
+  // Re-check while anything is on its way to the chain or waiting for the other owners.
+  usePoll(items.refresh, !busy && inFlight((items.data ?? []).map((x) => x.p), o.me.pkh));
   const list = items.data ?? [];
   const cur = list.find((x) => x.p.id === sel) ?? list.find((x) => x.status.needsYou) ?? list[0];
 
@@ -100,7 +103,7 @@ export function Inbox() {
         <span className="cap">{x.status.left ?? ""}</span>
       </span>
       <span style={{ fontWeight: 700 }}>{x.detail?.title ?? x.p.title}</span>
-      <span className="faint" style={{ fontSize: 12 }}>{x.vaultName}, {x.status.label}</span>
+      <span className="faint" style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center" }}>{x.status.label === "Waiting for the chain" && <span className="spin" aria-hidden="true" />}{x.vaultName}, {x.status.label}</span>
     </button>
   );
   return (
@@ -108,7 +111,7 @@ export function Inbox() {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, padding: "16px 20px", alignItems: "flex-start" }} {...(items.loading ? {} : { "data-ready": "" })}>
         <section className="panel" aria-label="Items" style={{ flex: "1 1 280px", maxWidth: 360 }}>
           <div className="ph"><span className="cap">Your signature</span></div>
-          {need.length ? need.map(row) : <p className="faint" style={{ padding: "10px 14px", margin: 0 }}>Nothing needs you.</p>}
+          {items.loading && !items.data ? <p style={{ padding: "10px 14px", margin: 0 }}><Spinner label="Reading your inbox and checking each tx on the chain…" /></p> : need.length ? need.map(row) : <p className="faint" style={{ padding: "10px 14px", margin: 0 }}>Nothing needs you.</p>}
           <div className="ph"><span className="cap">In flight and closed</span></div>
           {rest.map(row)}
           {items.error && <ErrorNote error={items.error} />}
@@ -120,7 +123,7 @@ export function Inbox() {
                 <span className="cap">{cur.detail?.kind ?? (cur.p.kind === "request" ? "Agent request" : "Change")}, {cur.vaultName}</span>
                 <span style={{ fontWeight: 700, fontSize: 16 }}>{cur.detail?.title ?? cur.p.title}</span>
               </div>
-              <span className={`pill ${cur.status.tone === "plain" ? "" : cur.status.tone}`}>{cur.status.label}</span>
+              <span className={`pill ${cur.status.tone === "plain" ? "" : cur.status.tone}`}>{cur.status.label === "Waiting for the chain" ? <Spinner label={cur.status.label} /> : cur.status.label}</span>
             </div>
             <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 14 }}>
               {cur.error && <ErrorNote error={`Can't check this tx: ${cur.error}`} />}
@@ -162,7 +165,7 @@ export function Inbox() {
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <span className="faint">{cur.status.left ?? ""}</span>
-                  {busy && <button type="button" className="btn" disabled>{busy}</button>}
+                  {busy && <button type="button" className="btn" disabled><Spinner label={busy} /></button>}
                   {!busy && cur.status.canSign && cur.detail && (needsConfirm(cur.detail) && !confirm ? (
                     <button type="button" className="btn stop" onClick={() => setConfirm(true)}>I've read the warnings</button>
                   ) : (
