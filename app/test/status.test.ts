@@ -9,8 +9,13 @@ const now = 1_000_000;
 describe("inbox status", () => {
   it("open, live, waiting for me: needs you, can sign, time left", () =>
     expect(statusOf(p({}), { state: "submittable", expiresAtMs: now + 2 * 3_600_000 + 60_000 }, me, now)).toMatchObject({ label: "1 of 2 signatures", canSign: true, needsYou: true, left: "2h 1m left" }));
-  it("open but already signed by me: in flight", () =>
-    expect(statusOf(p({ signedBy: [me] }), { state: "submittable", expiresAtMs: now + 60_000 }, me, now)).toMatchObject({ canSign: false, needsYou: false }));
+  it("open but already signed by me: says who it's waiting for, and that nothing is left for me", () =>
+    expect(statusOf(p({ signedBy: [me] }), { state: "submittable", expiresAtMs: now + 60_000 }, me, now)).toMatchObject({
+      label: "Signed by you. Waiting for 1 more owner.",
+      hint: "Nothing more for you to do: it's in the other owners' Needs you, and it goes to the chain by itself once they sign.",
+      canSign: false,
+      needsYou: false,
+    }));
   it("dead: the reason, no signing, rebuild for proposals with a recipe", () => {
     const s = statusOf(p({}), { state: "dead", reason: "its input x#0 was spent by another tx" }, me, now);
     expect(s).toMatchObject({ label: "Dead: its input x#0 was spent by another tx", tone: "dead", canSign: false, canRebuild: true, needsYou: false });

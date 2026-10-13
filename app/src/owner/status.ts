@@ -2,7 +2,7 @@ import type { Liveness } from "../../../sdk/src/core/index.ts";
 import type { Detail } from "./diff.ts";
 import type { PendingView } from "./types.ts";
 
-export type Status = { label: string; tone: "seal" | "fill" | "dead" | "plain"; canSign: boolean; canRebuild: boolean; needsYou: boolean; left?: string };
+export type Status = { label: string; tone: "seal" | "fill" | "dead" | "plain"; canSign: boolean; canRebuild: boolean; needsYou: boolean; left?: string; hint?: string };
 
 const leftText = (ms: number) => {
   const m = Math.max(0, Math.floor(ms / 60_000));
@@ -16,8 +16,13 @@ export function statusOf(p: PendingView, live: Liveness | undefined, viewer: str
   if (p.status === "submitting" || p.status === "submitted") return { label: "Waiting for the chain", tone: "fill", canSign: false, canRebuild: false, needsYou: false };
   if (live?.state === "dead") return { label: `Dead: ${live.reason}`, tone: "dead", canSign: false, canRebuild: rebuildable, needsYou: false };
   const mine = p.requiredSigners.includes(viewer) && !p.signedBy.includes(viewer);
+  const missing = p.requiredSigners.filter((k) => !p.signedBy.includes(k)).length;
+  const signedByMe = p.signedBy.includes(viewer) && missing > 0;
   return {
-    label: `${p.signedBy.filter((k) => p.requiredSigners.includes(k)).length} of ${p.requiredSigners.length} signatures`,
+    label: signedByMe
+      ? `Signed by you. Waiting for ${missing} more ${missing === 1 ? "owner" : "owners"}.`
+      : `${p.signedBy.filter((k) => p.requiredSigners.includes(k)).length} of ${p.requiredSigners.length} signatures`,
+    ...(signedByMe ? { hint: "Nothing more for you to do: it's in the other owners' Needs you, and it goes to the chain by itself once they sign." } : {}),
     tone: "seal",
     canSign: mine && live?.state === "submittable",
     canRebuild: false,

@@ -160,7 +160,11 @@ export function Inbox() {
                   </div>
                   <div style={{ display: "flex", flexDirection: "column" }}>
                     <span>{cur.status.label}</span>
-                    <span className="faint" style={{ fontSize: 12 }}>Needs: {cur.p.requiredSigners.map((k) => (k === o.me.pkh ? "you" : k === cur.p.createdBy && cur.p.kind === "request" ? "the agent" : `key ${short(k)}`)).join(", ")}</span>
+                    <span className="faint" style={{ fontSize: 12 }}>
+                      {cur.p.requiredSigners
+                        .map((k) => `${k === o.me.pkh ? "You" : k === cur.p.createdBy && cur.p.kind === "request" ? "The agent" : `Owner key ${short(k)}`}: ${cur.p.signedBy.includes(k) ? "signed" : "not yet"}`)
+                        .join(" · ")}
+                    </span>
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -174,6 +178,7 @@ export function Inbox() {
                   {!busy && cur.status.canRebuild && <button type="button" className="btn" onClick={() => void rebuild(cur)}>Rebuild</button>}
                 </div>
               </div>
+              {cur.status.hint && <div className="note">{cur.status.hint}</div>}
               {cur.status.tone === "dead" && <div className="note">{cur.p.kind === "request" ? "The agent re-files with the same intent id; the new request shows up here." : "Rebuild drafts it again against the current on-chain state; owners sign from zero."}</div>}
               {cur.status.label === "Landed" && <div className="note">Landed on Preprod. The chain now enforces the new state. <span className="mono faint">tx {short(cur.p.txHash ?? "")}</span></div>}
               <ErrorNote error={err} />
