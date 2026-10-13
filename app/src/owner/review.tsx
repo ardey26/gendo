@@ -7,6 +7,7 @@ import { detailOf, type Ctx, type Detail } from "./diff.ts";
 import { buildRecipe, type Recipe } from "./recipes.ts";
 import { needsConfirm } from "./status.ts";
 import { ErrorNote, short, type Owner } from "./ui.tsx";
+import { Chain } from "../ui/Brand.tsx";
 
 /** How the explanation is read for this owner: every key their wallet holds counts as theirs. */
 export function ctxFor(o: Owner, vault: Vault, labels: Record<string, string>, recipe?: Ctx["recipe"]): Ctx {
@@ -39,7 +40,7 @@ export async function prepare(o: Owner, vault: Vault, r: Recipe, labels: Record<
 }
 
 /** What a tx does: the summary, warnings, rule-by-rule diff, sentences and money. */
-export function DetailView({ detail, verified }: { detail: Detail; verified: boolean }) {
+export function DetailView({ detail, verified, network }: { detail: Detail; verified: boolean; network: string }) {
   const req = detail.kind === "Agent request";
   return (
     <>
@@ -54,8 +55,8 @@ export function DetailView({ detail, verified }: { detail: Detail; verified: boo
               {detail.rows.map((r, i) => (
                 <tr key={i}>
                   <td>{r.k}</td>
-                  <td className="mono" style={{ wordBreak: "break-all", color: r.changed && !req ? "#8f8578" : undefined, textDecoration: r.changed && !req ? "line-through" : undefined }}>{r.now || "—"}</td>
-                  <td className="mono" style={{ wordBreak: "break-all", color: r.changed ? "#e0452b" : "#b9afa0", fontWeight: r.changed ? 500 : 400 }}>{r.next || "—"}</td>
+                  <td className="mono" style={{ wordBreak: "break-all", color: r.changed && !req ? "#8f8578" : undefined, textDecoration: r.changed && !req ? "line-through" : undefined }}>{r.now ? <Chain value={r.now} network={network} /> : "—"}</td>
+                  <td className="mono" style={{ wordBreak: "break-all", color: r.changed ? "#e0452b" : "#b9afa0", fontWeight: r.changed ? 500 : 400 }}>{r.next ? <Chain value={r.next} network={network} /> : "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -70,14 +71,14 @@ export function DetailView({ detail, verified }: { detail: Detail; verified: boo
       )}
       {!detail.before && detail.after && <div className="note" style={{ borderColor: "#e0452b" }}><div className="cap">After signing</div>{detail.after}</div>}
       {detail.money.length > 0 && (
-        <table className="t"><tbody>{detail.money.map((m) => <tr key={m.label}><td style={{ wordBreak: "break-all" }}>{m.label}</td><td className="num">{m.value}</td></tr>)}</tbody></table>
+        <table className="t"><tbody>{detail.money.map((m) => <tr key={m.label}><td style={{ wordBreak: "break-all" }}>{m.label.startsWith("To ") ? <>To <Chain value={m.label.slice(3)} network={network} /></> : m.label}</td><td className="num">{m.value}</td></tr>)}</tbody></table>
       )}
     </>
   );
 }
 
 /** A review dialog: resolves true when the owner chooses to sign, false when they cancel. */
-export function useReview() {
+export function useReview(net: string) {
   const [s, setS] = useState<{ p: Prepared; resolve(ok: boolean): void; confirmed: boolean } | null>(null);
   const ask = (p: Prepared) => new Promise<boolean>((resolve) => setS({ p, resolve, confirmed: false }));
   const close = (ok: boolean) => {
@@ -94,7 +95,7 @@ export function useReview() {
           </div>
         </div>
         <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 14 }}>
-          <DetailView detail={s.p.detail} verified={s.p.verified} />
+          <DetailView detail={s.p.detail} verified={s.p.verified} network={net} />
           <div className="faint" style={{ fontSize: 12 }}>Computed in your browser from the transaction and the chain. Your wallet shows the same transaction next.</div>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", borderTop: "1px solid #2a241e", paddingTop: 14 }}>
             <button type="button" className="btn" onClick={() => close(false)}>Cancel</button>

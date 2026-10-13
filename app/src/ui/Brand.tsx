@@ -1,3 +1,5 @@
+import { explorerUrl } from "./explorer.ts";
+
 // The 限度 seal mark and the network band, as in the draft.
 export function Mark() {
   return (
@@ -22,5 +24,16 @@ export function Spinner({ label }: { label?: string }) {
       <span className="spin" aria-hidden="true" />
       {label}
     </span>
+  );
+}
+
+/** A transaction hash or address, linked to the explorer when there is one; `label` is what shows. */
+export function Chain({ value, network, label }: { value: string; network: string; label?: string }) {
+  const url = explorerUrl(network, value);
+  if (!url) return <>{label ?? value}</>;
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="mono" title={`${value} on Cardanoscan (preprod)`} style={{ textDecorationColor: "#3a332b", textUnderlineOffset: 3 }}>
+      {label ?? value}
+    </a>
   );
 }

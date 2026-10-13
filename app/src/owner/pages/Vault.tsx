@@ -8,7 +8,7 @@ import { decodeRecipe, encodeRecipe, titleOf, type Recipe } from "../recipes.ts"
 import { prepare, useReview } from "../review.tsx";
 import { toLovelace } from "../validate.ts";
 import { Copy, ErrorNote, Link, Shell, Signers, defaultSigners, short, useLoad, useOwner, usePoll } from "../ui.tsx";
-import { Spinner } from "../../ui/Brand.tsx";
+import { Chain, Spinner } from "../../ui/Brand.tsx";
 import { inFlight } from "../status.ts";
 import { partialSign } from "../wallet.ts";
 
@@ -19,7 +19,7 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
     const [view, listing, pending] = await Promise.all([readLight(policy, o.net), api.listing(policy), api.pendingOf(policy)]);
     return { view, labels: listing?.agents ?? {}, listing, pending };
   }, [policy]);
-  const review = useReview();
+  const review = useReview(o.net);
   const [busy, setBusy] = useState<string>();
   const [err, setErr] = useState<string>();
   const [note, setNote] = useState<string>();
@@ -112,7 +112,7 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
         )}
         {view && tab === "activity" && <Activity policy={policy} quiet={!!busy || waiting} />}
         {view && tab === "treasury" && (
-          <Treasury lovelace={view.treasuryLovelace} address={view.address} busy={!!busy} onFund={(lovelace) => void propose({ op: "fund", lovelace }, "Funding sent.")} />
+          <Treasury lovelace={view.treasuryLovelace} address={view.address} busy={!!busy} net={o.net} onFund={(lovelace) => void propose({ op: "fund", lovelace }, "Funding sent.")} />
         )}
         {view && cfg && tab === "settings" && (
           <>
@@ -160,7 +160,7 @@ function Activity({ policy, quiet }: { policy: string; quiet: boolean }) {
           <tbody>
             {(rows.data ?? []).length === 0 && <tr><td colSpan={4} className="muted">{rows.loading ? (quiet ? "Reading the chain…" : <Spinner label="Reading the chain…" />) : "No activity yet."}</td></tr>}
             {(rows.data ?? []).map((p) => (
-              <tr key={p.txHash}><td className="mono faint">{new Date(p.time).toISOString().replace("T", " ").slice(0, 16)}</td><td>{paymentLine(p)}.</td><td>{p.purpose ? cleanPurpose(p.purpose) : "—"}</td><td className="mono faint">tx {short(p.txHash)}</td></tr>
+              <tr key={p.txHash}><td className="mono faint">{new Date(p.time).toISOString().replace("T", " ").slice(0, 16)}</td><td>{paymentLine(p)}.</td><td>{p.purpose ? cleanPurpose(p.purpose) : "—"}</td><td className="faint">tx <Chain value={p.txHash} network={o.net} label={short(p.txHash)} /></td></tr>
             ))}
           </tbody>
         </table>
@@ -169,7 +169,7 @@ function Activity({ policy, quiet }: { policy: string; quiet: boolean }) {
   );
 }
 
-function Treasury({ lovelace, address, busy, onFund }: { lovelace: bigint; address: string; busy: boolean; onFund(l: bigint): void }) {
+function Treasury({ lovelace, address, busy, net, onFund }: { lovelace: bigint; address: string; busy: boolean; net: string; onFund(l: bigint): void }) {
   const [amt, setAmt] = useState("100");
   const l = toLovelace(amt);
   return (
@@ -178,7 +178,7 @@ function Treasury({ lovelace, address, busy, onFund }: { lovelace: bigint; addre
       <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ fontSize: 28, fontWeight: 900 }} className="mono">{ada(lovelace)} <span className="faint" style={{ fontSize: 14 }}>ADA</span></div>
         <div className="faint">Held by the vault script. Owners move it with their threshold; agents only within their allowance.</div>
-        <div className="kvrow"><span>Vault address</span><span className="mono">{short(address)} <Copy text={address} /></span></div>
+        <div className="kvrow"><span>Vault address</span><span className="mono"><Chain value={address} network={net} label={short(address)} /> <Copy text={address} /></span></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <label htmlFor="fundAmt">Fund from your wallet</label>
           <input id="fundAmt" value={amt} onChange={(e) => setAmt(e.target.value)} style={{ width: 120 }} />

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Spinner } from "../../ui/Brand.tsx";
+import { Chain, Spinner } from "../../ui/Brand.tsx";
 import { api } from "../api.ts";
 import { livenessOf, vaultFromId } from "../chain.ts";
 import { decodeRecipe, encodeRecipe, recipeMatches, titleOf } from "../recipes.ts";
@@ -15,7 +15,7 @@ type Item = { p: PendingView; status: Status; view?: Prepared; error?: string; v
 
 export function Inbox() {
   const o = useOwner();
-  const review = useReview();
+  const review = useReview(o.net);
   const [sel, setSel] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const [err, setErr] = useState<string>();
@@ -120,7 +120,7 @@ export function Inbox() {
             </div>
             <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 14 }}>
               {cur.error && <ErrorNote error={`Can't check this tx: ${cur.error}`} />}
-              {cur.view && <DetailView detail={cur.view.detail} verified={cur.view.verified} />}
+              {cur.view && <DetailView detail={cur.view.detail} verified={cur.view.verified} network={o.net} />}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between", borderTop: "1px solid #2a241e", paddingTop: 14 }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <div role="img" aria-label={cur.status.label} style={{ display: "flex", gap: 6 }}>
@@ -148,7 +148,7 @@ export function Inbox() {
               </div>
               {cur.status.hint && <div className="note">{cur.status.hint}</div>}
               {cur.status.tone === "dead" && <div className="note">{cur.p.kind === "request" ? "The agent re-files with the same intent id; the new request shows up here." : "Rebuild drafts it again against the current on-chain state; owners sign from zero."}</div>}
-              {cur.status.label === "Landed" && <div className="note">Landed on Preprod. The chain now enforces the new state. <span className="mono faint">tx {short(cur.p.txHash ?? "")}</span></div>}
+              {cur.status.label === "Landed" && <div className="note">Landed on Preprod. The chain now enforces the new state. <span className="faint">tx <Chain value={cur.p.txHash ?? ""} network={o.net} label={short(cur.p.txHash ?? "")} /></span></div>}
               <ErrorNote error={err} />
             </div>
           </section>

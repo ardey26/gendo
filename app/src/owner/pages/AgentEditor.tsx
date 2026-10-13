@@ -8,7 +8,7 @@ import { prepare, useReview } from "../review.tsx";
 import { agentProblems, editedDatum, PERIOD_MS, toLovelace, type AgentForm } from "../validate.ts";
 import { Copy, ErrorNote, Link, Shell, Signers, defaultSigners, short, useLoad, useOwner } from "../ui.tsx";
 import { partialSign } from "../wallet.ts";
-import { Spinner } from "../../ui/Brand.tsx";
+import { Chain, Spinner } from "../../ui/Brand.tsx";
 
 const periodOf = (ms: bigint): AgentForm["period"] => (ms === PERIOD_MS.week ? "week" : ms === PERIOD_MS.month ? "month" : "day");
 
@@ -16,7 +16,7 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
   const o = useOwner();
   const mine = o.vaults.find((v) => v.policy === policy);
   const vault = useMemo(() => (mine ? vaultFromId(mine.vaultId) : undefined), [mine?.vaultId]);
-  const review = useReview();
+  const review = useReview(o.net);
   const [periodTouched, setPeriodTouched] = useState(false);
   const loaded = useLoad(async () => {
     if (!vault) return undefined;
@@ -130,7 +130,7 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
           {field("newPayee", "Approved payees", (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {f.payees.map((p) => (
-                <div key={p} className="kvrow" style={{ padding: "4px 0" }}><span className="mono">{short(p)}</span><button type="button" className="btn" onClick={() => setF({ ...f, payees: f.payees.filter((x) => x !== p) })}>Remove</button></div>
+                <div key={p} className="kvrow" style={{ padding: "4px 0" }}><Chain value={p} network={o.net} label={short(p)} /><button type="button" className="btn" onClick={() => setF({ ...f, payees: f.payees.filter((x) => x !== p) })}>Remove</button></div>
               ))}
               <div style={{ display: "flex", gap: 8 }}><input id="newPayee" value={newPayee} onChange={(e) => setNewPayee(e.target.value.trim())} placeholder="addr_test1…" style={{ flex: 1 }} /><button type="button" className="btn" disabled={!newPayee} onClick={() => { setF({ ...f, payees: [...f.payees, newPayee] }); setNewPayee(""); }}>Add</button></div>
             </div>
