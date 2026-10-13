@@ -18,6 +18,7 @@ import {
   assertNotPaid,
   blockfrostQuery,
   txFacts,
+  liveness as coreLiveness,
   payOnce,
   submitResolving,
   connect,
@@ -147,26 +148,23 @@ const expiresAt = (lucid: LucidEvolution, ttlSlot?: string) =>
  */
 async function liveness(lucid: LucidEvolution, cbor: string) {
   const facts = txFacts(lucid, cbor);
-  const q = chainQuery();
-  const expires = new Date(facts.ttlMs).toISOString();
-  if (await q.txExists(facts.hash)) return { state: "landed" as const, reason: `already on-chain as ${facts.hash}` };
-  for (const i of facts.inputs) {
-    let by = await q.spenderOf(i.txHash, i.index);
-    if (by === facts.hash) return { state: "landed" as const, reason: `already on-chain as ${facts.hash}` };
+  const isUnspent = async (txHash: string, index: number) => {
     // Providers without a spender index: an input missing from its address's unspent set is gone.
     // (A lookup by reference returns the output even after it was spent.)
-    if (by === undefined) {
-      const [o] = await lucid.utxosByOutRef([{ txHash: i.txHash, outputIndex: i.index }]);
-      if (o && !(await lucid.utxosAt(o.address)).some((u) => u.txHash === i.txHash && u.outputIndex === i.index)) by = "another tx";
-    }
-    if (typeof by === "string")
-      return {
-        state: "dead" as const,
-        reason: `its input ${i.txHash}#${i.index} was spent by ${by === "another tx" ? by : `tx ${by}`} (for an escalation: the agent made another payment). Ask whoever built it to build it again, then sign the new file`,
-      };
-  }
-  if (Date.now() >= facts.ttlMs) return { state: "dead" as const, reason: `it expired at ${expires}. Build it again with a longer --ttl` };
-  return { state: "submittable" as const, expiresAt: expires };
+    const [o] = await lucid.utxosByOutRef([{ txHash, outputIndex: index }]);
+    if (!o) return undefined;
+    return (await lucid.utxosAt(o.address)).some((u) => u.txHash === txHash && u.outputIndex === index);
+  };
+  const l = await coreLiveness(chainQuery(), facts, Date.now(), isUnspent);
+  if (l.state === "landed") return { state: "landed" as const, reason: `already on-chain as ${l.hash}` };
+  if (l.state === "dead")
+    return {
+      state: "dead" as const,
+      reason: l.reason.startsWith("it expired")
+        ? `${l.reason}. Build it again with a longer --ttl`
+        : `${l.reason} (for an escalation: the agent made another payment). Ask whoever built it to build it again, then sign the new file`,
+    };
+  return { state: "submittable" as const, expiresAt: new Date(l.expiresAtMs).toISOString() };
 }
 
 /** Refuse to sign or submit a tx that can't land, with the reason. */
