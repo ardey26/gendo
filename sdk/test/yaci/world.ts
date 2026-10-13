@@ -232,7 +232,7 @@ export async function yaciWorld(opts: { maxTxValidityMs?: bigint } = {}) {
     [c.address, TARGET === "preprod" ? 10 : 200],
     [agent.address, 10],
     [agent.address, 30],
-    [stranger.address, TARGET === "preprod" ? 20 : 50],
+    [stranger.address, TARGET === "preprod" ? 30 : 50], // U3 and D4 lock 18 of it; P4 still needs collateral
   ]);
 
   lucid.selectWallet.fromPrivateKey(a.privateKey);
