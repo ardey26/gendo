@@ -1,0 +1,67 @@
+// server/test/app.test.ts
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { createApp } from "../src/app.js";
+import { openStore } from "../src/store.js";
+
+const store = () => openStore(join(mkdtempSync(join(tmpdir(), "gendo-srv-")), "db.sqlite"));
+const policy = "ab".repeat(28);
+
+describe("chain proxy", () => {
+  it("forwards allowlisted reads with only safe query params", async () => {
+    const seen: string[] = [];
+    const app = createApp({ store: store(), upstream: async (p) => (seen.push(p), new Response('[{"ok":1}]', { status: 200 })) });
+    const r = await app.request("/chain/addresses/addr_test1wq2hzkq0f6n5lkuw8zs0hfeuu85aeadmnfs0rywqs7aghssrt0340/utxos?page=2&count=100&evil=1");
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual([{ ok: 1 }]);
+    expect(seen).toEqual(["/addresses/addr_test1wq2hzkq0f6n5lkuw8zs0hfeuu85aeadmnfs0rywqs7aghssrt0340/utxos?page=2&count=100"]);
+  });
+  it("refuses anything not on the allowlist, including submit", async () => {
+    const app = createApp({ store: store(), upstream: async () => new Response("{}") });
+    for (const p of ["/chain/tx/submit", "/chain/accounts/stake1x", "/chain/txs/zz/utxos", "/chain/../admin"])
+      expect((await app.request(p)).status).toBe(404);
+    expect((await app.request("/chain/txs/" + "a".repeat(64) + "/utxos", { method: "POST" })).status).toBe(404);
+  });
+  it("answers 502 when the chain is down, without leaking anything", async () => {
+    const down = createApp({ store: store(), upstream: async () => { throw new Error("project_id preprodSECRET timed out"); } });
+    const r = await down.request("/chain/blocks/latest");
+    expect(r.status).toBe(502);
+    expect(await r.text()).not.toMatch(/SECRET|project_id/);
+    const five = createApp({ store: store(), upstream: async () => new Response("bad", { status: 503 }) });
+    expect((await five.request("/chain/blocks/latest")).status).toBe(502);
+  });
+  it("caches immutable tx reads for an hour and live reads for 10 s", async () => {
+    let t = 0;
+    let calls = 0;
+    const app = createApp({ store: store(), now: () => t, upstream: async () => (calls++, new Response("{}", { status: 200 })) });
+    const tx = "/chain/txs/" + "c".repeat(64);
+    await app.request(tx); t += 30 * 60_000; await app.request(tx);
+    expect(calls).toBe(1);
+    await app.request("/chain/blocks/latest"); t += 11_000; await app.request("/chain/blocks/latest");
+    expect(calls).toBe(3);
+  });
+  it("re-checks a tx that wasn't found yet after 10 s", async () => {
+    let t = 0;
+    let calls = 0;
+    const app = createApp({ store: store(), now: () => t, upstream: async () => (calls++, new Response("{}", { status: 404 })) });
+    const tx = "/chain/txs/" + "d".repeat(64);
+    await app.request(tx); t += 11_000; await app.request(tx);
+    expect(calls).toBe(2);
+  });
+});
+
+describe("public listing", () => {
+  it("returns a registered vault's name and listed flag", async () => {
+    const s = store();
+    s.put({ policy, name: "Acme payouts", listed: true });
+    const app = createApp({ store: s, upstream: async () => new Response("{}") });
+    expect(await (await app.request(`/public/${policy}`)).json()).toEqual({ policy, name: "Acme payouts", listed: true });
+  });
+  it("404 for unknown, 400 for a malformed id", async () => {
+    const app = createApp({ store: store(), upstream: async () => new Response("{}") });
+    expect((await app.request(`/public/${policy}`)).status).toBe(404);
+    expect((await app.request("/public/not-a-policy")).status).toBe(400);
+  });
+});
