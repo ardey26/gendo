@@ -14,6 +14,7 @@ export * as agent from "./agent.js";
 export * as cosign from "./cosign.js";
 export * from "./provider.js";
 export * from "./idempotency.js";
+export * from "./explain.js";
 export { payOnce, type PayResult } from "./pay.js";
 export { CML, Data, SLOT_CONFIG_NETWORK, credentialToAddress, generatePrivateKey, getAddressDetails } from "@lucid-evolution/lucid";
 export type { Assets, LucidEvolution, TxSignBuilder, UTxO } from "@lucid-evolution/lucid";
