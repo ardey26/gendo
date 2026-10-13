@@ -66,6 +66,7 @@ The full walkthrough, with every command, is in [`skills/gendo/SKILL.md`](skills
      }
    }
    ```
+   With the owners on the gendo app, add `"GENDO_SERVER"` (the app's URL) and `"GENDO_AGENT_TOKEN"` (issued by an owner for this allowance) to `env`: `request_approval` then lands in the owners' inbox. The signer needs `--allow-cosigned` for that (escalations get their own expiry cap, `--max-cosigned-ttl`, default 2h).
 
 ## Guarantees
 

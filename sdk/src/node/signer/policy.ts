@@ -17,6 +17,8 @@ export type SignerPolicy = {
   maxPerDay: Assets;
   /** Refuse txs whose TTL is further than this from now (pre-signed tx shelf life). */
   maxTtlMs: number;
+  /** TTL cap for co-signed escalations, which owners sign on their own machines over hours. Defaults to maxTtlMs. */
+  maxCoSignedTtlMs?: number;
   allowCoSigned: boolean;
   slot: { zeroTime: number; zeroSlot: number; slotLength: number };
 };
@@ -49,7 +51,8 @@ export function evaluate(policy: SignerPolicy, state: SignerState, txCbor: strin
   const ttl = body.ttl();
   if (ttl === undefined) return { ok: false, reason: "tx has no upper validity bound" };
   const ttlMs = policy.slot.zeroTime + (Number(ttl) - policy.slot.zeroSlot) * policy.slot.slotLength;
-  if (ttlMs - now > policy.maxTtlMs) return { ok: false, reason: `ttl ${ttlMs - now}ms exceeds signer max ${policy.maxTtlMs}ms` };
+  const cap = coSigned ? (policy.maxCoSignedTtlMs ?? policy.maxTtlMs) : policy.maxTtlMs;
+  if (ttlMs - now > cap) return { ok: false, reason: `ttl ${ttlMs - now}ms exceeds signer max ${cap}ms` };
 
   // Everything that leaves: the fee plus every asset paid to a destination.
   const paid: Assets[] = [{ lovelace: body.fee() }];

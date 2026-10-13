@@ -645,6 +645,7 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
         "max-ada-per-day": { type: "string", default: "100" },
         "max-per-day": { type: "string" },
         "max-ttl": { type: "string", default: "15m" },
+        "max-cosigned-ttl": { type: "string", default: "2h" },
         "allow-cosigned": { type: "boolean" },
         audit: { type: "string" },
         "socket-mode": { type: "string", default: "600" },
@@ -656,6 +657,8 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
     // Like ssh: a key file anyone else can read isn't held by the signer alone.
     if (statSync(keyPath(k.name)).mode & 0o077) die(`${keyPath(k.name)} is readable by group or others; chmod 600 it`);
     const socketMode = ({ "600": 0o600, "660": 0o660 } as const)[v["socket-mode"] as "600" | "660"] ?? die("--socket-mode must be 600 or 660");
+    const coSignedTtl = Number(duration(v["max-cosigned-ttl"]!));
+    if (coSignedTtl > owner.MAX_OFFLINE_TTL_MS) die(`--max-cosigned-ttl can be at most ${owner.MAX_OFFLINE_TTL_MS / 3_600_000}h`);
     const { SLOT_CONFIG_NETWORK } = await import("./sdk.js");
     await startSigner({
       socketPath: v.socket ?? join(HOME, "signer.sock"),
@@ -683,6 +686,7 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
           ),
         },
         maxTtlMs: Number(duration(v["max-ttl"]!)),
+        maxCoSignedTtlMs: coSignedTtl,
         allowCoSigned: !!v["allow-cosigned"],
         slot: SLOT_CONFIG_NETWORK[lucid.config().network!],
       },
@@ -707,7 +711,7 @@ const HELP = `vault <command>
   tx describe <tx.cbor> | tx witness <tx.cbor> --key k --out k.wit | tx assemble <tx.cbor> <wits...>
   --ttl 6h  how long an owner or over-limit tx stays submittable (default 10m, or 2h with --out; max 24h)
   signer start --key agent --allowance <unit> --dest addr1,addr2 [--socket path] [--max-ada-per-day N]
-               [--max-per-day unit:qty,...] [--max-tx-per-hour N] [--max-ttl 15m] [--allow-cosigned]
+               [--max-per-day unit:qty,...] [--max-tx-per-hour N] [--max-ttl 15m] [--allow-cosigned] [--max-cosigned-ttl 2h]
                [--socket-mode 600|660]   660: run the signer as its own OS user; the agent connects via the group
 env: VAULT_NETWORK=Preprod|Custom, BLOCKFROST_PROJECT_ID, VAULT_HOME`;
 

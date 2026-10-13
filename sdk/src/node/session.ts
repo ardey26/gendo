@@ -180,15 +180,35 @@ export async function requestApproval(s: AgentSession, p: PaymentRequest & { rea
       // Owners sign on their own machines: give them hours, not the agent's minutes.
       validityMs: Number(process.env.VAULT_TX_TTL_MS ?? offlineTtlMs(s.lucid.config().network!)),
     });
+    const cbor = built.tx.toCBOR();
+    const ttlSlot = describeTx(cbor).validity.ttlSlot;
+    const expires_at = ttlSlot ? new Date(s.lucid.slotToUnixTime(Number(ttlSlot))).toISOString() : undefined;
+    const server = process.env.GENDO_SERVER;
+    const token = process.env.GENDO_AGENT_TOKEN;
+    if (server && token) {
+      const res = await fetch(`${server.replace(/\/$/, "")}/requests`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ cbor, agentWitness: await s.sign(cbor), intentId: p.intent_id, purpose: p.purpose, reason: p.reason }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const body = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
+      if (!res.ok || !body.id) return { status: "blocked" as const, code: "SERVER", reason: body.error ?? `server answered ${res.status}` };
+      return {
+        status: "awaiting_owners" as const,
+        request_id: body.id,
+        expires_at,
+        note: "The owners see it in their inbox. Any other payment from this allowance before they sign makes it stale; if it goes dead, call request_approval again with the same intent_id.",
+      };
+    }
     const dir = join(s.home, "approvals");
     mkdirSync(dir, { recursive: true });
     const file = join(dir, `${p.intent_id.replace(/[^\w.-]/g, "_")}.cbor`);
-    writeFileSync(file, built.tx.toCBOR());
-    const ttlSlot = describeTx(built.tx.toCBOR()).validity.ttlSlot;
+    writeFileSync(file, cbor);
     return {
       status: "awaiting_owners" as const,
       file,
-      expires_at: ttlSlot ? new Date(s.lucid.slotToUnixTime(Number(ttlSlot))).toISOString() : undefined,
+      expires_at,
       note: "Hand this file to the owners. Any other payment from this allowance before they submit it makes it stale; if they report it dead, call request_approval again with the same intent_id.",
     };
   } catch (e) {
