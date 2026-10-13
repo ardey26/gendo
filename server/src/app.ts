@@ -4,7 +4,7 @@
 import { Hono, type Context } from "hono";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { mountAuth } from "./auth.js";
-import { mountPending } from "./pending.js";
+import { mountPending, unitsInOutputs } from "./pending.js";
 import type { openStore } from "./store.js";
 
 // Only what the public page reads: vault (script, no stake part) addresses, txs, redeemers.
@@ -38,6 +38,8 @@ export function createApp(d: {
   owners: (policy: string) => Promise<string[] | undefined>;
   /** Broadcast a fully signed tx. */
   submit: (txCbor: string) => Promise<{ ok: true; hash: string } | { ok: false; error: string }>;
+  /** Test seam: the native-asset units a tx's outputs carry. */
+  unitsMoved?: (txCbor: string) => string[];
 }) {
   const now = d.now ?? Date.now;
   const perMinute = d.perMinute ?? 600;
@@ -47,7 +49,7 @@ export function createApp(d: {
   const hits = new Map<string, { minute: number; n: number }>();
   const app = new Hono();
   const auth = mountAuth(app, { store: d.store, now, owners: d.owners });
-  mountPending(app, { store: d.store, now, owners: d.owners, submit: d.submit, upstream: d.upstream }, auth);
+  mountPending(app, { store: d.store, now, owners: d.owners, submit: d.submit, upstream: d.upstream, unitsMoved: d.unitsMoved ?? unitsInOutputs }, auth);
 
   const limited = (ip: string) => {
     const minute = Math.floor(now() / 60_000);
@@ -109,7 +111,7 @@ export function createApp(d: {
     const policy = c.req.param("policy");
     if (!/^[0-9a-f]{56}$/.test(policy)) return c.json({ error: "bad vault id" }, 400);
     const l = d.store.get(policy);
-    return l ? c.json(l) : c.json({ error: "unknown vault" }, 404);
+    return l ? c.json({ ...l, agents: d.store.labelsOf(policy) }) : c.json({ error: "unknown vault" }, 404);
   });
 
   return app;

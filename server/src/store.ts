@@ -29,6 +29,13 @@ export function openStore(path: string) {
   const setStatus = db.prepare("update pending set status = ?, tx_hash = ?, error = ? where id = ? and status = ?");
   const putWitness = db.prepare("insert or ignore into witnesses (pending_id, key_hash, witness) values (?, ?, ?)");
   const witnessesOf = db.prepare("select key_hash, witness from witnesses where pending_id = ?");
+  db.exec("create table if not exists agent_tokens (token_hash text primary key, policy text not null, unit text not null, created_at integer not null)");
+  db.exec("create table if not exists labels (policy text not null, unit text not null, name text not null, primary key (policy, unit))");
+  const delTokens = db.prepare("delete from agent_tokens where policy = ? and unit = ?");
+  const insToken = db.prepare("insert into agent_tokens (token_hash, policy, unit, created_at) values (?, ?, ?, ?)");
+  const getToken = db.prepare("select policy, unit from agent_tokens where token_hash = ?");
+  const putLabel = db.prepare("insert into labels (policy, unit, name) values (?, ?, ?) on conflict(policy, unit) do update set name = excluded.name");
+  const labelsOf = db.prepare("select unit, name from labels where policy = ?");
   const get = db.prepare("select policy, name, listed from vaults where policy = ?");
   const put = db.prepare(
     "insert into vaults (policy, name, listed) values (?, ?, ?) on conflict(policy) do update set name = excluded.name, listed = excluded.listed",
@@ -58,5 +65,13 @@ export function openStore(path: string) {
     setStatus: (id: string, from: string, to: string, txHash: string | null, error: string | null) => setStatus.run(to, txHash, error, id, from).changes === 1,
     putWitness: (id: string, keyHash: string, witness: string) => void putWitness.run(id, keyHash, witness),
     witnessesOf: (id: string) => witnessesOf.all(id) as { key_hash: string; witness: string }[],
+    rotateAgentToken(hash: string, policy: string, unit: string, at: number) {
+      delTokens.run(policy, unit);
+      insToken.run(hash, policy, unit, at);
+    },
+    agentOfToken: (hash: string) => getToken.get(hash) as { policy: string; unit: string } | undefined,
+    putLabel: (policy: string, unit: string, name: string) => void putLabel.run(policy, unit, name),
+    labelsOf: (policy: string): Record<string, string> =>
+      Object.fromEntries((labelsOf.all(policy) as { unit: string; name: string }[]).map((r) => [r.unit, r.name])),
   };
 }

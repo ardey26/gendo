@@ -97,7 +97,7 @@ describe("public listing", () => {
     const s = store();
     s.put({ policy, name: "Acme payouts", listed: true });
     const app = createApp({ owners: async () => undefined, submit: async () => ({ ok: false as const, error: "unused" }), store: s, upstream: async () => new Response("{}") });
-    expect(await (await app.request(`/public/${policy}`)).json()).toEqual({ policy, name: "Acme payouts", listed: true });
+    expect(await (await app.request(`/public/${policy}`)).json()).toEqual({ policy, name: "Acme payouts", listed: true, agents: {} });
   });
   it("404 for unknown, 400 for a malformed id", async () => {
     const app = createApp({ owners: async () => undefined, submit: async () => ({ ok: false as const, error: "unused" }), store: store(), upstream: async () => new Response("{}") });

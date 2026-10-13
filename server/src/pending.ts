@@ -4,8 +4,10 @@
 // never decides what a tx does: each owner's browser recomputes that from the chain.
 import { randomBytes } from "node:crypto";
 import type { Context, Hono } from "hono";
+import { CML } from "../../sdk/src/core/index.js";
+import { toHex } from "../../sdk/src/core/bytes.js";
 import { bodyHash, requiredSignersOf, verifiedSigners, withWitnesses } from "../../sdk/src/core/witnesses.js";
-import type { mountAuth } from "./auth.js";
+import { sha256, type mountAuth } from "./auth.js";
 import type { PendingRow, openStore } from "./store.js";
 
 export type PendingView = {
@@ -19,8 +21,25 @@ type Deps = {
   owners: (policy: string) => Promise<string[] | undefined>;
   submit: (txCbor: string) => Promise<{ ok: true; hash: string } | { ok: false; error: string }>;
   upstream: (pathAndQuery: string) => Promise<Response>;
+  unitsMoved: (txCbor: string) => string[];
 };
 type Auth = ReturnType<typeof mountAuth>;
+
+/** Native-asset units in the tx's outputs (an escalation's continuing output carries its allowance token). */
+export function unitsInOutputs(txCbor: string): string[] {
+  const outs = CML.Transaction.from_cbor_hex(txCbor).body().outputs();
+  const units = new Set<string>();
+  for (let i = 0; i < outs.len(); i++) {
+    const ma = outs.get(i).amount().multi_asset();
+    const ps = ma.keys();
+    for (let j = 0; j < ps.len(); j++) {
+      const p = ps.get(j);
+      const names = ma.get_assets(p)!.keys();
+      for (let k = 0; k < names.len(); k++) units.add(p.to_hex() + toHex(names.get(k).to_raw_bytes()));
+    }
+  }
+  return [...units];
+}
 
 const isHex = (s: unknown, max: number): s is string => typeof s === "string" && s.length <= max && /^[0-9a-f]+$/.test(s) && s.length % 2 === 0;
 
@@ -107,6 +126,56 @@ export function mountPending(app: Hono, d: Deps, auth: Auth) {
       return c.json({ error: (e as Error).message }, 400);
     }
     return c.json(await addWitness(r, witness));
+  });
+
+  const unitOk = (policy: string, unit: string) => /^[0-9a-f]{56}$/.test(policy) && unit.startsWith(policy) && /^[0-9a-f]{58,120}$/.test(unit);
+
+  app.post("/vaults/:policy/agents/:unit/token", async (c) => {
+    const { policy, unit } = c.req.param() as { policy: string; unit: string };
+    if (!unitOk(policy, unit)) return c.json({ error: "bad allowance id" }, 400);
+    const who = await auth.ownerOf(c, policy);
+    if (typeof who !== "string") return who;
+    const token = "gnd_" + randomBytes(32).toString("hex");
+    d.store.rotateAgentToken(sha256(token), policy, unit, d.now());
+    return c.json({ token });
+  });
+
+  app.put("/vaults/:policy/agents/:unit/label", async (c) => {
+    const { policy, unit } = c.req.param() as { policy: string; unit: string };
+    if (!unitOk(policy, unit)) return c.json({ error: "bad allowance id" }, 400);
+    const who = await auth.ownerOf(c, policy);
+    if (typeof who !== "string") return who;
+    const { name } = await c.req.json<{ name?: unknown }>();
+    if (typeof name !== "string" || !name.trim() || name.length > 60) return c.json({ error: "name: 1 to 60 characters" }, 400);
+    d.store.putLabel(policy, unit, name.trim());
+    return c.json({ unit, name: name.trim() });
+  });
+
+  app.post("/requests", async (c) => {
+    const m = /^Bearer (gnd_[0-9a-f]{64})$/.exec(c.req.header("authorization") ?? "");
+    const agent = m ? d.store.agentOfToken(sha256(m[1]!)) : undefined;
+    if (!agent) return c.json({ error: "bad agent token" }, 401);
+    const { cbor, agentWitness, intentId, purpose, reason } = await c.req.json<Record<string, unknown>>();
+    if (!isHex(cbor, 64_000) || !isHex(agentWitness, 4_000) || typeof intentId !== "string" || intentId.length > 120 || typeof purpose !== "string" || typeof reason !== "string")
+      return c.json({ error: "cbor, agentWitness, intentId, purpose and reason are required" }, 400);
+    let required: string[];
+    let agentKeys: string[];
+    try {
+      required = requiredSignersOf(cbor);
+      agentKeys = verifiedSigners(cbor, agentWitness);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+    if (!d.unitsMoved(cbor).includes(agent.unit)) return c.json({ error: "this tx doesn't spend your allowance" }, 403);
+    const owners = (await d.owners(agent.policy)) ?? [];
+    const others = required.filter((k) => !owners.includes(k));
+    if (!required.some((k) => owners.includes(k)) || others.length !== 1 || !agentKeys.includes(others[0]!))
+      return c.json({ error: "an escalation names owners plus exactly your agent key, signed by it" }, 400);
+    const row = insert({
+      policy: agent.policy, kind: "request", title: purpose.slice(0, 200), cbor, unit: agent.unit,
+      recipe: { intentId, purpose: purpose.slice(0, 300), reason: reason.slice(0, 500) }, required, createdBy: others[0]!,
+    });
+    return c.json(await addWitness(row, agentWitness));
   });
 
   return { insert, addWitness };

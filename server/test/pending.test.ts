@@ -85,3 +85,51 @@ describe("pending inbox", async () => {
     submitResult = { ok: true, hash: "h" };
   });
 });
+
+describe("agent requests", async () => {
+  const { A, B, C, txFor, wit } = await world();
+  const agent = wallet();
+  const unitX = policy + "11".repeat(28);
+  const unitY = policy + "22".repeat(28);
+  const db = store();
+  db.put({ policy, name: "Acme payouts", listed: true }); // labels show on a registered vault's listing
+  // Requests must move the allowance token: these fake txs name the unit in a tagged output.
+  const app = createApp({
+    store: db,
+    upstream: async () => new Response("{}", { status: 404 }),
+    owners: async (p) => (p === policy ? [A.pkh, B.pkh, C.pkh] : undefined),
+    submit: async () => ({ ok: true, hash: "h" }),
+    unitsMoved: (cbor: string) => (cbor === "" ? [] : [unitX]),
+  });
+  const session = async (k: typeof A) => ({ authorization: `Bearer ${(await (await signIn(app, k)).json()).token}`, "content-type": "application/json" });
+  const post = (path: string, headers: Record<string, string>, body: unknown) => app.request(path, { method: "POST", headers, body: JSON.stringify(body) });
+
+  it("an owner issues a token; the agent posts its request with its own signature; owners see it", async () => {
+    const { token } = await (await post(`/vaults/${policy}/agents/${unitX}/token`, await session(A), {})).json();
+    expect(token).toMatch(/^gnd_[0-9a-f]{64}$/);
+    const cbor = await txFor([A.pkh, B.pkh, agent.pkh]);
+    const agentWit = await wit(cbor, agent as unknown as { sk: string });
+    const r = await post("/requests", { authorization: `Bearer ${token}`, "content-type": "application/json" }, { cbor, agentWitness: agentWit, intentId: "INV-2", purpose: "hosting", reason: "annual plan" });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ kind: "request", status: "open", signedBy: [agent.pkh], recipe: { intentId: "INV-2", purpose: "hosting", reason: "annual plan" } });
+  });
+
+  it("a token for allowance Y can't post a request that moves allowance X", async () => {
+    const { token } = await (await post(`/vaults/${policy}/agents/${unitY}/token`, await session(A), {})).json();
+    const cbor = await txFor([A.pkh, B.pkh, agent.pkh]);
+    const r = await post("/requests", { authorization: `Bearer ${token}`, "content-type": "application/json" }, { cbor, agentWitness: await wit(cbor, agent as unknown as { sk: string }), intentId: "I", purpose: "p", reason: "r" });
+    expect(r.status).toBe(403);
+  });
+
+  it("rotating a token kills the old one; a bad token gets 401", async () => {
+    const t1 = (await (await post(`/vaults/${policy}/agents/${unitX}/token`, await session(A), {})).json()).token;
+    await post(`/vaults/${policy}/agents/${unitX}/token`, await session(A), {});
+    const cbor = await txFor([A.pkh, agent.pkh]);
+    expect((await post("/requests", { authorization: `Bearer ${t1}`, "content-type": "application/json" }, { cbor, agentWitness: "00", intentId: "I", purpose: "p", reason: "r" })).status).toBe(401);
+  });
+
+  it("owners name agents; the public listing shows the names", async () => {
+    expect((await app.request(`/vaults/${policy}/agents/${unitX}/label`, { method: "PUT", headers: await session(B), body: JSON.stringify({ name: "payout-bot" }) })).status).toBe(200);
+    expect((await (await app.request(`/public/${policy}`)).json()).agents).toEqual({ [unitX]: "payout-bot" });
+  });
+});
