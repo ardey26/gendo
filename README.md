@@ -113,6 +113,7 @@ cli/test/separated.sh                   # the skill's setup with owners, signer 
 cli/test/signer-user.sh                 # the signer as its own Linux user (runs in a container)
 mcp/test/e2e.sh                         # an MCP client driving the agent's three tools
 app/test/public-e2e.sh                  # the public vault page in headless Chrome, served by the keyless server
+server/test/approvals-e2e.sh            # owners sign in, pause, unpause and approve an agent request through the server
 agent/test/e2e.sh                       # LLM agent (local Ollama model) paying invoices through the signer
 
 # the same attack + double-pay suites against real preprod (PV11). One full run makes about
@@ -389,10 +390,11 @@ Test counts at the time of writing:
 |---|---|
 | On-chain Aiken tests | 210 (196 unit/adversarial, 14 property) |
 | Mutations killed (each by at least one unit test, so no kill depends on a property test's luck) | 85 |
-| SDK unit + emulator tests | 116 |
-| Keyless server (chain proxy, listings) | 13 |
+| SDK unit + emulator tests | 136 |
+| Keyless server (chain proxy, listings, sign-in, inbox, agent requests) | 26 |
 | App (public page formatting) | 8 |
 | Public page end to end (devnet, headless Chrome) | 8 checks |
+| Approvals through the server (devnet: sign-in, single-owner pause, 2-of-2 unpause, an agent request via MCP) | 7 checks |
 | Adversarial replays (devnet PV10; preprod PV11) | 38 on devnet; 34 on preprod |
 | Double-pay scenarios incl. signer dedupe (devnet and preprod) | 6 each |
 | CLI smoke checks | 19 |
