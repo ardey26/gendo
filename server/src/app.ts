@@ -109,7 +109,10 @@ export function createApp(d: {
     const key = q.size ? `${path}?${q}` : path;
     const hit = cache.get(key);
     const ttl = (status: number) => (path.startsWith("/txs/") && status === 200 ? 3_600_000 : 10_000);
-    if (hit && now() - hit.at < ttl(hit.status)) return c.body(hit.body, hit.status as 200, { "content-type": "application/json" });
+    // The owner app marks its reads (Lucid's Blockfrost client sends project_id): it builds txs on
+    // the current state, so it never takes a cached answer. The public page's reads stay cached.
+    const fresh = c.req.header("project_id") === "no-cache";
+    if (hit && !fresh && now() - hit.at < ttl(hit.status)) return c.body(hit.body, hit.status as 200, { "content-type": "application/json" });
     let res: Response;
     try {
       res = await fetchWithRetry(key);

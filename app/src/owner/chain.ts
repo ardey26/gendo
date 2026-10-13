@@ -7,14 +7,15 @@ import { readVault, type Get } from "../../../sdk/src/read/index.ts";
 import type { Net } from "./types.ts";
 
 const base = () => `${location.origin}/chain`;
+// Sent as project_id to our proxy (which adds the real key): tells it to skip its cache.
 
 export async function openChain(net: Net): Promise<LucidEvolution> {
   let l: LucidEvolution;
   if (net === "Custom") {
     const g = (await (await fetch(`${base()}/genesis`)).json()) as { system_start: number; slot_length: number };
     SLOT_CONFIG_NETWORK.Custom = { zeroTime: g.system_start * 1000, zeroSlot: 0, slotLength: g.slot_length * 1000 };
-    l = await Lucid(withRetries(new Blockfrost(base(), "via-server")), "Custom");
-  } else l = await connect({ network: net, blockfrostUrl: base(), blockfrostProjectId: "via-server" });
+    l = await Lucid(withRetries(new Blockfrost(base(), "no-cache")), "Custom");
+  } else l = await connect({ network: net, blockfrostUrl: base(), blockfrostProjectId: "no-cache" });
   owner.setOwnerTxTtl(owner.offlineTtlMs(net)); // owners sign on their own time; devnets have a horizon of minutes
   return l;
 }
@@ -45,7 +46,7 @@ export async function inputsOf(l: LucidEvolution, cbor: string, net: Net): Promi
 }
 
 export async function livenessOf(l: LucidEvolution, cbor: string): Promise<Liveness> {
-  const q = blockfrostQuery(base(), "via-server");
+  const q = blockfrostQuery(base(), "no-cache");
   return liveness(q, txFacts(l, cbor), (await q.tipMs()) ?? Date.now(), async (txHash, index) => {
     const [o] = await l.utxosByOutRef([{ txHash, outputIndex: index }]);
     if (!o) return undefined;
@@ -54,7 +55,7 @@ export async function livenessOf(l: LucidEvolution, cbor: string): Promise<Liven
 }
 
 const get: Get = async (path) => {
-  const r = await fetch(`${base()}${path}`);
+  const r = await fetch(`${base()}${path}`, { headers: { project_id: "no-cache" } });
   if (r.status === 404) return undefined;
   if (!r.ok) throw new Error("The chain is unavailable right now. Try again in a minute.");
   return r.json();

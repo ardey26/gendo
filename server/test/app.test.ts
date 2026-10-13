@@ -127,3 +127,17 @@ describe("chain proxy for the owner pages", () => {
     for (const p of ["/tx/submit", "/accounts/stake_test1uq", "/addresses/stake_test1uq/utxos", "/network"]) expect((await app.request(`/chain${p}`)).status, p).toBe(404);
   });
 });
+
+describe("fresh reads for owners", () => {
+  it("a request marked no-cache skips the cache: owners build txs on the chain's current state", async () => {
+    let calls = 0;
+    const app = createApp({ owners: async () => undefined, allowanceOf: async () => undefined, submit: async () => ({ ok: false as const, error: "unused" }), store: store(), upstream: async () => (calls++, new Response("[]", { status: 200 })) });
+    const path = "/chain/addresses/addr_test1vq9jmx22305ltuwma9kmz2vcgde7rvydaynfxwqvfrypp9c97slgs/utxos";
+    await app.request(path);
+    await app.request(path);
+    expect(calls).toBe(1);
+    await app.request(path, { headers: { project_id: "no-cache" } });
+    expect(calls).toBe(2);
+  });
+});
+

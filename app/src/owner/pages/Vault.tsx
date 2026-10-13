@@ -52,7 +52,7 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
   const pauseControls = cfg && (
     <>
       {!cfg.paused && <button type="button" className="btn stop" disabled={!!busy} onClick={() => void propose({ op: "pause" }, "Pause sent.")}>Pause all agents</button>}
-      {cfg.paused && !openUnpause && <button type="button" className="btn" disabled={!!busy} onClick={() => navigate(`/v/${policy}/settings`)}>Propose unpause</button>}
+      {cfg.paused && !openUnpause && <button type="button" className="btn" disabled={!!busy} onClick={() => navigate(`/v/${policy}/settings`)}>Unpause…</button>}
       {cfg.paused && openUnpause && <button type="button" className="btn" disabled>Unpause proposed: {openUnpause.signedBy.length} of {openUnpause.requiredSigners.length}</button>}
     </>
   );
