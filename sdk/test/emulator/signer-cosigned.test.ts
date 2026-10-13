@@ -41,4 +41,8 @@ describe("signer TTL caps", async () => {
     expect(evaluate(base, emptyState(), built.tx.toCBOR(), emulator.now())).toMatchObject({ ok: false, reason: expect.stringMatching(/ttl/) }));
   it("signs it under a co-signed cap of 3 h", () =>
     expect(evaluate({ ...base, maxCoSignedTtlMs: 3 * 3_600_000 }, emptyState(), built.tx.toCBOR(), emulator.now())).toMatchObject({ ok: true }));
+  it("an escalation doesn't spend the agent's own daily budget or need its payee list: the owners authorize it", () => {
+    const tight = { ...base, maxCoSignedTtlMs: 3 * 3_600_000, maxPerDay: { lovelace: 1n * ADA }, destinations: [] };
+    expect(evaluate(tight, emptyState(), built.tx.toCBOR(), emulator.now())).toMatchObject({ ok: true, coSigned: true });
+  });
 });

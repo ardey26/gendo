@@ -73,11 +73,13 @@ VAULT_HOME=$SIG "$V" signer start --key agent --allowance "$UNIT" --dest "$PAYEE
   2>$SIG/signer.log &
 SPID=$!; trap 'kill $SRV $SPID 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do [[ -S $SOCK ]] && break; sleep 1; done
-OUT=$(GENDO_SERVER=$SERVER GENDO_AGENT_TOKEN=$AT VAULT_HOME=$AG "$TSX" "$ROOT/mcp/test/call.ts" "$UNIT" "$SOCK" request_approval \
-  "{\"to\":\"$PAYEE\",\"amount_ada\":15,\"intent_id\":\"INV-E2E\",\"purpose\":\"annual hosting\",\"reason\":\"over the 10 ADA cap\"}" 2>$T/mcp.log) \
+REQ_ARGS="{\"to\":\"$PAYEE\",\"amount_ada\":15,\"intent_id\":\"INV-E2E\",\"purpose\":\"annual hosting\",\"reason\":\"over the 10 ADA cap\"}"
+DOWN=$(GENDO_SERVER=http://127.0.0.1:9 GENDO_AGENT_TOKEN=$AT VAULT_HOME=$AG "$TSX" "$ROOT/mcp/test/call.ts" "$UNIT" "$SOCK" request_approval "$REQ_ARGS" 2>/dev/null)
+[[ $(jq -r .status <<<"$DOWN") == blocked ]] && ok "server down: the request is blocked, not lost" || fail "server down: $DOWN"
+OUT=$(GENDO_SERVER=$SERVER GENDO_AGENT_TOKEN=$AT VAULT_HOME=$AG "$TSX" "$ROOT/mcp/test/call.ts" "$UNIT" "$SOCK" request_approval "$REQ_ARGS" 2>$T/mcp.log) \
   || { tail -20 $T/mcp.log; fail "MCP call"; }
 RID=$(jq -r .request_id <<<"$OUT"); [[ -n $RID && $RID != null ]] || fail "no request: $OUT"
-[[ $(status_of "$RID") == open ]] && ok "the request reached the inbox, signed by the agent" || fail "request not open"
+[[ $(status_of "$RID") == open ]] && ok "retried with the same intent: the request reached the inbox, signed by the agent" || fail "request not open"
 TOKEN=$TA "$TSX" "$OC" list "$POLICY" | jq -r ".[] | select(.id==\"$RID\") | .cbor" > $T/req.cbor
 as $OWN tx witness $T/req.cbor --key a --out $T/req.a.wit >/dev/null
 as $OWN tx witness $T/req.cbor --key b --out $T/req.b.wit >/dev/null
