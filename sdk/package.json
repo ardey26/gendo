@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@lucid-evolution/lucid": "0.6.5",
-    "@noble/hashes": "1.8.0"
+    "@noble/hashes": "1.8.0",
+    "@scure/base": "2.4.0"
   },
   "devDependencies": {
     "@types/node": "26.6.4",
