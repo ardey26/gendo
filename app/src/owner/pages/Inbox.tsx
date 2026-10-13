@@ -6,7 +6,7 @@ import { decodeRecipe, encodeRecipe, recipeMatches, titleOf } from "../recipes.t
 import { DetailView, explainFor, prepare, useReview, type Prepared } from "../review.tsx";
 import { inFlight, needsConfirm, statusOf, type Status } from "../status.ts";
 import type { PendingView } from "../types.ts";
-import { ErrorNote, Shell, short, useLoad, useOwner, usePoll } from "../ui.tsx";
+import { ErrorNote, Shell, StatusIcon, short, useLoad, useOwner, usePoll } from "../ui.tsx";
 import { partialSign } from "../wallet.ts";
 import { explainTx } from "../../../../sdk/src/core/index.ts";
 import { inputsOf } from "../chain.ts";
@@ -97,7 +97,7 @@ export function Inbox() {
         <span className="cap">{x.status.left ?? ""}</span>
       </span>
       <span style={{ fontWeight: 700 }}>{x.view?.detail.title ?? x.p.title}</span>
-      <span className="faint" style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center" }}>{x.status.label === "Waiting for the chain" && <span className="spin" aria-hidden="true" />}{x.vaultName}, {x.status.label}</span>
+      <span className="faint" style={{ fontSize: 12 }}>{x.vaultName}, {x.status.label}</span>
     </button>
   );
   const d = cur?.view?.detail;
@@ -115,11 +115,8 @@ export function Inbox() {
         {cur && (
           <section className="panel" aria-label="Detail" style={{ flex: "999 1 480px", minWidth: 0 }}>
             <div className="ph">
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <span className="cap">{d?.kind ?? (cur.p.kind === "request" ? "Agent request" : "Change")}, {cur.vaultName}</span>
-                <span style={{ fontWeight: 700, fontSize: 16 }}>{d?.title ?? cur.p.title}</span>
-              </div>
-              <span className={`pill ${cur.status.tone === "plain" ? "" : cur.status.tone}`}>{cur.status.label === "Waiting for the chain" ? <Spinner label={cur.status.label} /> : cur.status.label}</span>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>{d?.title ?? cur.p.title}</span>
+              <StatusIcon status={cur.status} spinning={!busy} />
             </div>
             <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 14 }}>
               {cur.error && <ErrorNote error={`Can't check this tx: ${cur.error}`} />}

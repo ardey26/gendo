@@ -128,3 +128,22 @@ export function Shell({ policy, tab, title, actions, children }: { policy?: stri
     </div>
   );
 }
+
+/** A status as one icon (its words in the tooltip). `spinning`: false when another spinner is showing. */
+export function StatusIcon({ status, spinning }: { status: { label: string; tone: string; needsYou: boolean; hint?: string }; spinning: boolean }) {
+  const svg = (color: string, path: ReactNode) => (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{path}</svg>
+  );
+  const waitingChain = status.label === "Waiting for the chain";
+  const icon =
+    status.label === "Landed" ? svg("#b9afa0", <><circle cx="10" cy="10" r="8" /><path d="M6.5 10.2l2.4 2.3 4.6-5" /></>)
+    : status.tone === "dead" ? svg("#e0452b", <><circle cx="10" cy="10" r="8" /><path d="M7.2 7.2l5.6 5.6M12.8 7.2l-5.6 5.6" /></>)
+    : waitingChain ? (spinning ? <span className="spin" aria-hidden="true" style={{ width: 16, height: 16 }} /> : svg("#8f8578", <><circle cx="10" cy="10" r="8" /><path d="M10 5.5V10l3 2" /></>))
+    : status.needsYou ? svg("#e0452b", <path d="M12.8 3.6l3.6 3.6-8.6 8.6H4.2v-3.6z M11 5.4l3.6 3.6" />)
+    : svg("#8f8578", <><circle cx="10" cy="10" r="8" /><path d="M10 5.5V10l3 2" /></>);
+  return (
+    <span role="img" aria-label={status.label} title={status.label} style={{ display: "inline-flex", alignItems: "center" }}>
+      {icon}
+    </span>
+  );
+}

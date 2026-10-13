@@ -110,7 +110,7 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
             </div>
           </section>
         )}
-        {view && tab === "activity" && <Activity policy={policy} />}
+        {view && tab === "activity" && <Activity policy={policy} quiet={!!busy || waiting} />}
         {view && tab === "treasury" && (
           <Treasury lovelace={view.treasuryLovelace} address={view.address} busy={!!busy} onFund={(lovelace) => void propose({ op: "fund", lovelace }, "Funding sent.")} />
         )}
@@ -143,7 +143,8 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
   );
 }
 
-function Activity({ policy }: { policy: string }) {
+/** `quiet`: another spinner is already on screen, so loading shows as text. */
+function Activity({ policy, quiet }: { policy: string; quiet: boolean }) {
   const o = useOwner();
   const rows = useLoad(async () => {
     const view = await readLight(policy, o.net);
@@ -157,7 +158,7 @@ function Activity({ policy }: { policy: string }) {
         <table className="t" style={{ minWidth: 760 }}>
           <thead><tr><th>Time</th><th>What happened</th><th>Agent's note (not verified)</th><th>Ref</th></tr></thead>
           <tbody>
-            {(rows.data ?? []).length === 0 && <tr><td colSpan={4} className="muted">{rows.loading ? <Spinner label="Reading the chain…" /> : "No activity yet."}</td></tr>}
+            {(rows.data ?? []).length === 0 && <tr><td colSpan={4} className="muted">{rows.loading ? (quiet ? "Reading the chain…" : <Spinner label="Reading the chain…" />) : "No activity yet."}</td></tr>}
             {(rows.data ?? []).map((p) => (
               <tr key={p.txHash}><td className="mono faint">{new Date(p.time).toISOString().replace("T", " ").slice(0, 16)}</td><td>{paymentLine(p)}.</td><td>{p.purpose ? cleanPurpose(p.purpose) : "—"}</td><td className="mono faint">tx {short(p.txHash)}</td></tr>
             ))}
