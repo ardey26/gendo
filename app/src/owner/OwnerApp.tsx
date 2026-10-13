@@ -77,7 +77,7 @@ export default function OwnerApp({ route, network }: { route: Route; network: Ne
   }, [me]);
 
   if (fatal) return <div className="app" data-error><Netband /><p style={{ padding: 20 }}>{fatal}</p></div>;
-  if (!lucid) return <div className="app"><Netband /><p style={{ padding: 20 }}><Spinner label="Connecting to the chain…" /></p></div>;
+  if (!lucid) return <div className="app"><Netband /><div className="boot"><Spinner label="Connecting to the chain…" /></div></div>;
   if (!me) return <Connect onConnected={setMe} />;
   const ctx: Owner = {
     net: network, lucid, me, vaults, reloadVaults, inboxCount, reloadInbox,

@@ -63,7 +63,7 @@ export function PublicPage({ policy, network }: { policy: string; network: ReadN
       {body}
     </div>
   );
-  if (s.phase === "loading") return frame(<main style={{ padding: 20 }}><p><Spinner label="Reading the chain…" /></p></main>);
+  if (s.phase === "loading") return frame(<main className="boot"><Spinner label="Reading the chain…" /></main>);
   if (s.phase === "error") return frame(<main style={{ padding: 20 }}><p>{s.message}</p></main>, { "data-error": "" });
   if (s.phase === "missing") return frame(<main style={{ padding: 20 }}><h1>No vault found</h1><p className="muted">Nothing lives at this vault id on preprod.</p></main>, { "data-ready": "" });
 

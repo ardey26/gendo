@@ -21,7 +21,7 @@ function App() {
   }, []);
   const route = parseRoute(path);
   return (
-    <Suspense fallback={<div className="app"><p style={{ padding: 20 }}><Spinner label="Loading…" /></p></div>}>
+    <Suspense fallback={<div className="app"><div className="boot"><Spinner label="Loading…" /></div></div>}>
       {route.page === "public" ? <PublicPage policy={route.policy} network={network} /> : <OwnerApp route={route} network={network} />}
     </Suspense>
   );
