@@ -1,0 +1,16 @@
+{
+  "name": "@gendo/app",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build", "test": "vitest run" },
+  "dependencies": { "react": "19.3.0", "react-dom": "19.3.0" },
+  "devDependencies": {
+    "vite": "8.3.1",
+    "@vitejs/plugin-react": "6.1.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "vitest": "4.1.11",
+    "typescript": "5.9"
+  }
+}
