@@ -3,6 +3,8 @@
 // payment key hash that signed it, which the server then looks for in the vault's owners.
 import { CML } from "@lucid-evolution/lucid";
 import { verifyData } from "@lucid-evolution/sign_data";
+// Re-exported for tools and tests outside sdk/ that sign in as an owner with a key file.
+export { signData } from "@lucid-evolution/sign_data";
 import { fromHex } from "../core/bytes.js";
 
 export function cip8Signer(addressHex: string, payloadHex: string, signed: { signature: string; key: string }): string | undefined {
