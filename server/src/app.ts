@@ -33,6 +33,12 @@ const remoteIp = (c: Context) => {
   }
 };
 
+/** Behind a proxy every request comes from the proxy: read the client from the header it sets
+ * (one clients can't forge, e.g. Cloudflare's True-Client-IP), else the connection's address. */
+export function clientIpFrom(header?: string) {
+  return (c: Context) => (header && c.req.header(header)?.split(",")[0]?.trim()) || remoteIp(c);
+}
+
 export function createApp(d: {
   upstream: (pathAndQuery: string) => Promise<Response>;
   store: ReturnType<typeof openStore>;

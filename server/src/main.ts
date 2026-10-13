@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { ogmiosCostModels } from "../../sdk/src/core/provider.js";
 import { readVault, type Get } from "../../sdk/src/read/index.js";
-import { createApp } from "./app.js";
+import { clientIpFrom, createApp } from "./app.js";
 import { openStore } from "./store.js";
 
 const url = process.env.BLOCKFROST_URL ?? "https://cardano-preprod.blockfrost.io/api/v0";
@@ -66,7 +66,7 @@ const submit = async (cbor: string) => {
     return { ok: false as const, error: `couldn't reach the chain: ${(e as Error).message}`, transient: true };
   }
 };
-const app = createApp({ store: openStore(process.env.DB ?? "gendo.sqlite"), upstream: chain, owners, allowanceOf, submit, network });
+const app = createApp({ store: openStore(process.env.DB ?? "gendo.sqlite"), upstream: chain, owners, allowanceOf, submit, network, clientIp: clientIpFrom(process.env.CLIENT_IP_HEADER) });
 const dir = resolve(process.env.STATIC_DIR ?? "../app/dist");
 app.use("/assets/*", serveStatic({ root: relative(process.cwd(), dir) }));
 const index = () => readFileSync(join(dir, "index.html"), "utf8");

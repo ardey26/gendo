@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createApp } from "../src/app.js";
+import { clientIpFrom, createApp } from "../src/app.js";
 import { openStore } from "../src/store.js";
 import { signIn, wallet } from "./helpers.js";
 
@@ -84,6 +84,14 @@ describe("chain proxy limits", () => {
     for (let i = 0; i < 3; i++) expect((await hit("1.1.1.1")).status).toBe(200);
     expect((await hit("1.1.1.1")).status).toBe(429);
     expect((await hit("2.2.2.2")).status).toBe(200);
+  });
+  it("behind a proxy, rate-limits by the header the proxy sets", async () => {
+    const app = createApp({ owners: async () => undefined, allowanceOf: async () => undefined, submit: async () => ({ ok: false as const, error: "unused" }), store: store(), upstream: ok, perMinute: 2, clientIp: clientIpFrom("true-client-ip") });
+    const hit = (ip?: string) => app.request("/chain/blocks/latest", { headers: ip ? { "true-client-ip": ip, "x-forwarded-for": "9.9.9.9" } : {} });
+    for (let i = 0; i < 2; i++) expect((await hit("1.1.1.1")).status).toBe(200);
+    expect((await hit("1.1.1.1")).status).toBe(429);
+    expect((await hit("2.2.2.2")).status).toBe(200);
+    expect((await hit()).status).toBe(200); // no header: falls back to the connection's address
   });
   it("retries a failed read once", async () => {
     let calls = 0;
