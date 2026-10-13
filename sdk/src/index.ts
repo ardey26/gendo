@@ -6,3 +6,4 @@ export * as signerPolicy from "./node/signer/policy.js";
 export { startSigner, witnessFor, loadPrivateKey } from "./node/signer/server.js";
 export { requestWitness } from "./node/signer/client.js";
 export * as session from "./node/session.js";
+export { cip8Signer } from "./node/auth.js";

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@lucid-evolution/lucid": "0.6.5",
+    "@lucid-evolution/sign_data": "0.1.32",
     "@noble/hashes": "1.8.0",
     "@scure/base": "2.4.0"
   },
