@@ -14,6 +14,7 @@ export type CapView = { unit: string; perPayment: bigint; perPeriod: bigint; spe
 export type AllowanceView = {
   unit: string;
   txHash: string;
+  outputIndex: number;
   lovelace: bigint;
   status: "active" | "paused" | "expired" | "not started" | "malformed";
   agent?: string;
@@ -58,7 +59,7 @@ async function utxosAt(get: Get, address: string): Promise<BfUtxo[]> {
 const MAX_DATE_MS = 8_640_000_000_000_000n; // the largest time a JS Date can show
 
 function allowanceView(u: BfUtxo, unit: string, network: ReadNetwork, now: bigint): AllowanceView {
-  const base = { unit, txHash: u.tx_hash, lovelace: qty(u.amount, "lovelace"), caps: [], payees: [] };
+  const base = { unit, txHash: u.tx_hash, outputIndex: u.output_index, lovelace: qty(u.amount, "lovelace"), caps: [], payees: [] };
   let d;
   try {
     if (!u.inline_datum) throw new Error("no inline datum");

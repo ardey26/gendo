@@ -28,6 +28,9 @@ import {
   generatePrivateKey,
   listAllowances,
   makeVault,
+  formatVaultId,
+  parseVaultId as coreParseVaultId,
+  type VaultId,
   owner,
   providerFromEnv,
   readAllowance,
@@ -107,18 +110,13 @@ async function submitSafely(lucid: LucidEvolution, signedCbor: string, intent?: 
  * One line that identifies a vault, for owners and operators to share instead
  * of copying state.json: `gendo:<network>:<seed tx>#<i>[:<ref-script tx>#<i>]`.
  */
-const vaultId = (s: State) =>
-  ["gendo", s.network.toLowerCase(), `${s.seed.txHash}#${s.seed.outputIndex}`, ...(s.refScript ? [`${s.refScript.txHash}#${s.refScript.outputIndex}`] : [])].join(":");
-
+const vaultId = (s: State) => formatVaultId(s as VaultId);
 function parseVaultId(id: string): State {
-  const ref = (x: string) => {
-    const m = /^([0-9a-f]{64})#(\d+)$/.exec(x);
-    return m ? { txHash: m[1]!, outputIndex: Number(m[2]) } : die(`bad vault id part ${x}`);
-  };
-  const [tag, net, seed, refScript, ...extra] = id.split(":");
-  if (tag !== "gendo" || !net || !seed || extra.length) die("a vault id looks like gendo:preprod:<tx>#<i>[:<tx>#<i>]");
-  const network = { preprod: "Preprod", custom: "Custom" }[net!] ?? die(`unknown network ${net}`);
-  return { network, seed: ref(seed!), ...(refScript ? { refScript: ref(refScript) } : {}) };
+  try {
+    return coreParseVaultId(id);
+  } catch (e) {
+    return die((e as Error).message);
+  }
 }
 
 function vaultOf(lucid: LucidEvolution): Vault {

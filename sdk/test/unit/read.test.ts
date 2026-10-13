@@ -133,6 +133,7 @@ describe("vault state from the chain", () => {
     expect(v!.treasuryLovelace).toBe(150_000_000n);
     const a = v!.allowances[0]!;
     expect(a.status).toBe("active");
+    expect([a.txHash, a.outputIndex]).toEqual(["a1".repeat(32), 0]);
     expect(a.caps[0]).toMatchObject({ unit: "lovelace", perPayment: 10_000_000n, perPeriod: 25_000_000n, spentThisPeriod: 3_000_000n, leftThisPeriod: 22_000_000n });
     expect(a.payees).toEqual([addressToBech32({ payment: { type: "Key", hash: h(4) }, stake: null }, "Preprod")]);
   });

@@ -15,13 +15,13 @@ describe("format", () => {
   });
   it("says what an agent may do in one sentence", () => {
     const s = allowanceSentence({
-      unit: "u", txHash: "t", lovelace: 0n, status: "active", payees: ["a", "b", "c"], periodMs: 86_400_000n, expiresAt: Date.UTC(2026, 10, 30),
+      unit: "u", txHash: "t", outputIndex: 0, lovelace: 0n, status: "active", payees: ["a", "b", "c"], periodMs: 86_400_000n, expiresAt: Date.UTC(2026, 10, 30),
       caps: [{ unit: "lovelace", perPayment: 10_000_000n, perPeriod: 25_000_000n, spentThisPeriod: 0n, leftThisPeriod: 25_000_000n }],
     });
     expect(s).toBe("This agent can pay up to 10 ADA at a time and 25 ADA per day, only to these 3 addresses, until 2026-11-30.");
   });
   it("says so for a malformed allowance", () => {
-    expect(allowanceSentence({ unit: "u", txHash: "t", lovelace: 0n, status: "malformed", payees: [], caps: [] })).toBe("Malformed: the agent can't spend it, and owners can reclaim it.");
+    expect(allowanceSentence({ unit: "u", txHash: "t", outputIndex: 0, lovelace: 0n, status: "malformed", payees: [], caps: [] })).toBe("Malformed: the agent can't spend it, and owners can reclaim it.");
   });
   const row = { txHash: "t", time: 0, payees: [{ address: "a", lovelace: 4_000_000n }], fee: 367_842n, allowanceDelta: -4_367_842n };
   it("describes a payment from what the chain says, fee included", () => {
