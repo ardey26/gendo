@@ -55,10 +55,10 @@ describe("chain proxy", () => {
 describe("chain proxy limits", () => {
   const ok = async () => new Response("[]", { status: 200 });
   const script = "addr_test1wrkxfunr68mzu72j9v44sukw8k35awymwk6v2ghudau3rnca6a4lh";
-  it("reads only vault (script) addresses", async () => {
+  it("reads any testnet address's UTxOs (owners' wallets too)", async () => {
     const app = createApp({ owners: async () => undefined, allowanceOf: async () => undefined, submit: async () => ({ ok: false as const, error: "unused" }), store: store(), upstream: ok });
     expect((await app.request(`/chain/addresses/${script}/utxos`)).status).toBe(200);
-    expect((await app.request("/chain/addresses/addr_test1vq9jmx22305ltuwma9kmz2vcgde7rvydaynfxwqvfrypp9c97slgs/utxos")).status).toBe(404);
+    expect((await app.request("/chain/addresses/addr_test1vq9jmx22305ltuwma9kmz2vcgde7rvydaynfxwqvfrypp9c97slgs/utxos")).status).toBe(200);
   });
   it("allows the redeemer reads the history needs", async () => {
     const app = createApp({ owners: async () => undefined, allowanceOf: async () => undefined, submit: async () => ({ ok: false as const, error: "unused" }), store: store(), upstream: ok });
@@ -103,5 +103,27 @@ describe("public listing", () => {
     const app = createApp({ owners: async () => undefined, allowanceOf: async () => undefined, submit: async () => ({ ok: false as const, error: "unused" }), store: store(), upstream: async () => new Response("{}") });
     expect((await app.request(`/public/${policy}`)).status).toBe(404);
     expect((await app.request("/public/not-a-policy")).status).toBe(400);
+  });
+});
+
+describe("chain proxy for the owner pages", () => {
+  const ok = async (p: string) => new Response(JSON.stringify({ p }), { status: 200 });
+  const mk = () => createApp({ owners: async () => undefined, allowanceOf: async () => undefined, submit: async () => ({ ok: false as const, error: "unused" }), store: store(), upstream: ok });
+  it("forwards what Lucid needs to build owner txs", async () => {
+    const app = mk();
+    for (const p of [
+      "/genesis",
+      "/epochs/latest/parameters",
+      "/addresses/addr_test1vq9jmx22305ltuwma9kmz2vcgde7rvydaynfxwqvfrypp9c97slgs/utxos?page=1",
+      `/addresses/addr_test1wrkxfunr68mzu72j9v44sukw8k35awymwk6v2ghudau3rnca6a4lh/utxos/${"ab".repeat(28)}11`,
+      `/assets/${"ab".repeat(28)}11/addresses?count=2`,
+      `/scripts/${"ab".repeat(28)}/cbor`,
+      `/txs/${"c".repeat(64)}/cbor`,
+    ])
+      expect((await app.request(`/chain${p}`)).status, p).toBe(200);
+  });
+  it("still refuses submit, accounts and anything unlisted", async () => {
+    const app = mk();
+    for (const p of ["/tx/submit", "/accounts/stake_test1uq", "/addresses/stake_test1uq/utxos", "/network"]) expect((await app.request(`/chain${p}`)).status, p).toBe(404);
   });
 });

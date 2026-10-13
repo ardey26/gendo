@@ -18,5 +18,5 @@ export * from "./explain.js";
 export * from "./liveness.js";
 export * from "./witnesses.js";
 export { payOnce, type PayResult } from "./pay.js";
-export { CML, Data, SLOT_CONFIG_NETWORK, credentialToAddress, generatePrivateKey, getAddressDetails } from "@lucid-evolution/lucid";
+export { Blockfrost, CML, Data, Lucid, SLOT_CONFIG_NETWORK, credentialToAddress, generatePrivateKey, getAddressDetails } from "@lucid-evolution/lucid";
 export type { Assets, LucidEvolution, TxSignBuilder, UTxO } from "@lucid-evolution/lucid";

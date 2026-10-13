@@ -8,12 +8,17 @@ import { mountAuth } from "./auth.js";
 import { mountPending, type SubmitResult } from "./pending.js";
 import type { openStore } from "./store.js";
 
-// Only what the public page reads: vault (script, no stake part) addresses, txs, redeemers.
+// What the public page and the owner pages read. Never submit, accounts or pools: owners' txs
+// reach the chain only through the inbox, after every required signer has signed.
 const ALLOWED = [
-  /^\/addresses\/addr_test1w[02-9ac-hj-np-z]{52}\/utxos$/,
-  /^\/txs\/[0-9a-f]{64}(\/utxos|\/metadata|\/redeemers)?$/,
-  /^\/scripts\/datum\/[0-9a-f]{64}\/cbor$/,
+  /^\/genesis$/,
+  /^\/epochs\/latest\/parameters$/,
   /^\/blocks\/latest$/,
+  /^\/addresses\/addr_test1[02-9ac-hj-np-z]{50,110}\/utxos(\/[0-9a-f]{56,120})?$/,
+  /^\/assets\/[0-9a-f]{56,120}\/addresses$/,
+  /^\/scripts\/[0-9a-f]{56}(\/cbor)?$/,
+  /^\/scripts\/datum\/[0-9a-f]{64}\/cbor$/,
+  /^\/txs\/[0-9a-f]{64}(\/utxos|\/metadata|\/redeemers|\/cbor)?$/,
 ];
 const QUERY: Record<string, RegExp> = { page: /^([1-9]|1\d|20)$/, count: /^([1-9]\d?|100)$/, order: /^(asc|desc)$/ };
 const MAX_CACHE = 5_000;

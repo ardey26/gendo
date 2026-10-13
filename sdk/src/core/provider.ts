@@ -27,7 +27,7 @@ export function providerFromEnv(env = process.env): ProviderConfig {
   };
 }
 
-async function ogmiosCostModels(url: string): Promise<Record<string, number[]> | undefined> {
+export async function ogmiosCostModels(url: string): Promise<Record<string, number[]> | undefined> {
   return new Promise((resolve) => {
     const ws = new WebSocket(url);
     const t = setTimeout(() => resolve(undefined), 5000);
