@@ -26,8 +26,13 @@ const owners = async (policy: string) => {
   const hit = ownerCache.get(policy);
   if (hit && Date.now() - hit.at < 30_000) return hit.owners;
   const found = (await readVault(get, policy, network, Date.now()))?.config?.owners;
+  if (ownerCache.size >= 1_000) ownerCache.delete(ownerCache.keys().next().value!); // bounded: random ids can't grow it
   ownerCache.set(policy, { at: Date.now(), owners: found });
   return found;
+};
+const allowanceOf = async (policy: string, unit: string) => {
+  const a = (await readVault(get, policy, network, Date.now()))?.allowances.find((x) => x.unit === unit);
+  return a?.agent ? { ref: `${a.txHash}#${a.outputIndex}`, agent: a.agent } : undefined;
 };
 const submit = async (cbor: string) => {
   try {
@@ -38,12 +43,13 @@ const submit = async (cbor: string) => {
       signal: AbortSignal.timeout(30_000),
     });
     const text = await r.text();
-    return r.ok ? { ok: true as const, hash: text.replace(/"/g, "").trim() } : { ok: false as const, error: text.slice(0, 500) };
+    if (r.ok) return { ok: true as const, hash: text.replace(/"/g, "").trim() };
+    return { ok: false as const, error: text.slice(0, 500), transient: r.status === 429 || r.status >= 500 };
   } catch (e) {
-    return { ok: false as const, error: `couldn't reach the chain: ${(e as Error).message}` };
+    return { ok: false as const, error: `couldn't reach the chain: ${(e as Error).message}`, transient: true };
   }
 };
-const app = createApp({ store: openStore(process.env.DB ?? "gendo.sqlite"), upstream, owners, submit });
+const app = createApp({ store: openStore(process.env.DB ?? "gendo.sqlite"), upstream, owners, allowanceOf, submit, network });
 const dir = resolve(process.env.STATIC_DIR ?? "../app/dist");
 app.use("/assets/*", serveStatic({ root: relative(process.cwd(), dir) }));
 const index = () => readFileSync(join(dir, "index.html"), "utf8");

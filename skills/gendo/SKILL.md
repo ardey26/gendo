@@ -85,7 +85,7 @@ VAULT_HOME=~/.gendo-signer cli/vault signer start --key agent --allowance <unit>
 - It keeps a daily budget per asset: lovelace from `--max-ada-per-day`, and each token from `--max-per-day <unit>:<qty>`. A token with no daily limit can't leave.
 - Its rate limits, budgets and intent-id dedupe table persist across restarts.
 - It refuses to start if the key file is readable by anyone but its owner.
-- With `--allow-cosigned` it also signs over-limit requests for the owners to co-sign. Those live for hours (owners sign on their own machines), so they get their own expiry cap: `--max-cosigned-ttl 2h` (default 2h, at most 24h). The agent's own spends keep `--max-ttl` (15 minutes).
+- With `--allow-cosigned` it also signs over-limit requests for the owners to co-sign. Those live for hours (owners sign on their own machines), so they get their own expiry cap: `--max-cosigned-ttl 2h` (default 2h, at most 24h). The agent's own spends keep `--max-ttl` (15 minutes). Only a real escalation (the CoSignedSpend redeemer, which the chain accepts only with the owners' signatures) gets the longer cap; it doesn't count against the signer's daily budget or rate, and it may pay an address off the signer's list, because the owners approve each one.
 - **Run it as its own OS user when the agent can run shell commands or read files.** Otherwise the agent can read the key file, and only the on-chain caps still apply (the stolen-key case). With `--socket-mode 660`, members of the socket's group can connect but can't read the key:
   ```bash
   # once, as root (Linux; checked by cli/test/signer-user.sh)

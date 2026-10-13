@@ -390,11 +390,11 @@ Test counts at the time of writing:
 |---|---|
 | On-chain Aiken tests | 210 (196 unit/adversarial, 14 property) |
 | Mutations killed (each by at least one unit test, so no kill depends on a property test's luck) | 85 |
-| SDK unit + emulator tests | 136 |
-| Keyless server (chain proxy, listings, sign-in, inbox, agent requests) | 26 |
+| SDK unit + emulator tests | 145 |
+| Keyless server (chain proxy, listings, sign-in, inbox, agent requests, limits) | 39 |
 | App (public page formatting) | 8 |
 | Public page end to end (devnet, headless Chrome) | 8 checks |
-| Approvals through the server (devnet: sign-in, single-owner pause, 2-of-2 unpause, an agent request via MCP) | 7 checks |
+| Approvals through the server (devnet: sign-in, single-owner pause, 2-of-2 unpause, an agent request via MCP, server down and retry) | 8 checks |
 | Adversarial replays (devnet PV10; preprod PV11) | 38 on devnet; 34 on preprod |
 | Double-pay scenarios incl. signer dedupe (devnet and preprod) | 6 each |
 | CLI smoke checks | 19 |

@@ -7,6 +7,7 @@ export type Listing = { policy: string; name: string; listed: boolean };
 export type PendingRow = {
   id: string; policy: string; kind: string; title: string; cbor: string; body_hash: string; recipe: string | null; required: string;
   created_by: string; created_at: number; status: string; tx_hash: string | null; error: string | null; unit: string | null;
+  attempts: number; updated_at: number;
 };
 
 export function openStore(path: string) {
@@ -15,18 +16,29 @@ export function openStore(path: string) {
   db.exec("create table if not exists sessions (token_hash text primary key, pkh text not null, expires_at integer not null)");
   const putSession = db.prepare("insert into sessions (token_hash, pkh, expires_at) values (?, ?, ?)");
   const getSession = db.prepare("select pkh, expires_at from sessions where token_hash = ?");
+  const purgeSessions = db.prepare("delete from sessions where expires_at < ?");
+  // Which vaults each key added to its app: the inbox only shows those.
+  db.exec("create table if not exists user_vaults (pkh text not null, policy text not null, vault_id text not null, primary key (pkh, policy))");
+  const addUserVault = db.prepare("insert into user_vaults (pkh, policy, vault_id) values (?, ?, ?) on conflict(pkh, policy) do update set vault_id = excluded.vault_id");
+  const userVaults = db.prepare("select policy, vault_id from user_vaults where pkh = ?");
   db.exec(`create table if not exists pending (
     id text primary key, policy text not null, kind text not null, title text not null, cbor text not null,
     body_hash text not null, recipe text, required text not null, created_by text not null, created_at integer not null,
-    status text not null, tx_hash text, error text, unit text)`);
+    status text not null, tx_hash text, error text, unit text, attempts integer not null default 0, updated_at integer not null default 0)`);
   db.exec("create table if not exists witnesses (pending_id text not null, key_hash text not null, witness text not null, primary key (pending_id, key_hash))");
   const insPending = db.prepare(
-    "insert into pending (id, policy, kind, title, cbor, body_hash, recipe, required, created_by, created_at, status, unit) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)",
+    "insert into pending (id, policy, kind, title, cbor, body_hash, recipe, required, created_by, created_at, status, unit, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)",
   );
   const getPending = db.prepare("select * from pending where id = ?");
   const byPolicy = db.prepare("select * from pending where policy = ? order by created_at desc limit 200");
-  const allOpen = db.prepare("select * from pending order by created_at desc limit 1000");
-  const setStatus = db.prepare("update pending set status = ?, tx_hash = ?, error = ? where id = ? and status = ?");
+  const mine = db.prepare(
+    "select p.* from pending p join user_vaults u on u.policy = p.policy and u.pkh = ? where p.required like ? order by p.created_at desc limit 200",
+  );
+  const openCount = db.prepare("select count(*) as n from pending where policy = ? and status = 'open'");
+  const openBy = db.prepare("select count(*) as n from pending where created_by = ? and status = 'open'");
+  const setStatus = db.prepare(
+    "update pending set status = ?, tx_hash = coalesce(?, tx_hash), error = ?, updated_at = ?, attempts = attempts + ? where id = ? and status = ?",
+  );
   const putWitness = db.prepare("insert or ignore into witnesses (pending_id, key_hash, witness) values (?, ?, ?)");
   const witnessesOf = db.prepare("select key_hash, witness from witnesses where pending_id = ?");
   db.exec("create table if not exists agent_tokens (token_hash text primary key, policy text not null, unit text not null, created_at integer not null)");
@@ -48,21 +60,28 @@ export function openStore(path: string) {
     put(l: Listing) {
       put.run(l.policy, l.name, l.listed ? 1 : 0);
     },
-    putSession(hash: string, pkh: string, expiresAt: number) {
+    putSession(hash: string, pkh: string, expiresAt: number, now: number) {
+      purgeSessions.run(now);
       putSession.run(hash, pkh, expiresAt);
     },
+    addUserVault: (pkh: string, policy: string, vaultId: string) => void addUserVault.run(pkh, policy, vaultId),
+    userVaults: (pkh: string) => (userVaults.all(pkh) as { policy: string; vault_id: string }[]).map((r) => ({ policy: r.policy, vaultId: r.vault_id })),
     getSession(hash: string): { pkh: string; expiresAt: number } | undefined {
       const r = getSession.get(hash) as { pkh: string; expires_at: number } | undefined;
       return r ? { pkh: r.pkh, expiresAt: r.expires_at } : undefined;
     },
     insertPending(r: { id: string; policy: string; kind: string; title: string; cbor: string; bodyHash: string; recipe: unknown; required: string[]; createdBy: string; createdAt: number; unit?: string }) {
-      insPending.run(r.id, r.policy, r.kind, r.title, r.cbor, r.bodyHash, JSON.stringify(r.recipe ?? null), JSON.stringify(r.required), r.createdBy, r.createdAt, r.unit ?? null);
+      insPending.run(r.id, r.policy, r.kind, r.title, r.cbor, r.bodyHash, JSON.stringify(r.recipe ?? null), JSON.stringify(r.required), r.createdBy, r.createdAt, r.unit ?? null, r.createdAt);
     },
     getPending: (id: string) => getPending.get(id) as PendingRow | undefined,
     pendingFor: (policy: string) => byPolicy.all(policy) as PendingRow[],
-    recentPending: () => allOpen.all() as PendingRow[],
-    /** Compare-and-set: only one caller moves a row out of `from`. */
-    setStatus: (id: string, from: string, to: string, txHash: string | null, error: string | null) => setStatus.run(to, txHash, error, id, from).changes === 1,
+    /** Rows in the vaults this key added, where it is a required signer. */
+    pendingForSigner: (pkh: string) => mine.all(pkh, `%"${pkh}"%`) as PendingRow[],
+    openCount: (policy: string) => (openCount.get(policy) as { n: number }).n,
+    openBy: (pkh: string) => (openBy.get(pkh) as { n: number }).n,
+    /** Compare-and-set: only one caller moves a row out of `from`. A move back to open counts an attempt. */
+    setStatus: (id: string, from: string, to: string, at: number, o: { txHash?: string; error?: string | null } = {}) =>
+      setStatus.run(to, o.txHash ?? null, o.error ?? null, at, from === "submitting" && to === "open" ? 1 : 0, id, from).changes === 1,
     putWitness: (id: string, keyHash: string, witness: string) => void putWitness.run(id, keyHash, witness),
     witnessesOf: (id: string) => witnessesOf.all(id) as { key_hash: string; witness: string }[],
     rotateAgentToken(hash: string, policy: string, unit: string, at: number) {

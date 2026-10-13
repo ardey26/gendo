@@ -20,8 +20,11 @@ export function mountAuth(app: Hono, d: { store: ReturnType<typeof openStore>; n
     for (const [k, v] of challenges) if (v.exp < d.now()) challenges.delete(k);
     if (challenges.size > 10_000) return c.json({ error: "busy, try again" }, 503);
     const nonce = randomBytes(16).toString("hex");
-    const payload = utf8ToHex(`gendo sign-in ${nonce}`);
-    challenges.set(nonce, { addressHex: address, payload, exp: d.now() + CHALLENGE_MS });
+    const exp = d.now() + CHALLENGE_MS;
+    // The wallet shows this text: it names the site and expires, so a relayed request is visible and short-lived.
+    const site = new URL(c.req.url).host;
+    const payload = utf8ToHex(`Sign in to gendo\nsite: ${site}\nnonce: ${nonce}\nexpires: ${new Date(exp).toISOString()}`);
+    challenges.set(nonce, { addressHex: address, payload, exp });
     return c.json({ nonce, payload });
   });
 
@@ -34,7 +37,7 @@ export function mountAuth(app: Hono, d: { store: ReturnType<typeof openStore>; n
     if (!pkh) return c.json({ error: "sign-in failed" }, 401);
     const token = randomBytes(32).toString("hex");
     const expiresAt = d.now() + SESSION_MS;
-    d.store.putSession(sha256(token), pkh, expiresAt);
+    d.store.putSession(sha256(token), pkh, expiresAt, d.now());
     return c.json({ token, pkh, expiresAt });
   });
 

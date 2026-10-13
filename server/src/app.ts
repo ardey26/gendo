@@ -2,9 +2,10 @@
 // The keyless server. It can delay or withhold reads (liveness); it holds no
 // wallet key, so it can never move funds (custody stays with owners' wallets).
 import { Hono, type Context } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { mountAuth } from "./auth.js";
-import { mountPending, unitsInOutputs } from "./pending.js";
+import { mountPending, type SubmitResult } from "./pending.js";
 import type { openStore } from "./store.js";
 
 // Only what the public page reads: vault (script, no stake part) addresses, txs, redeemers.
@@ -36,10 +37,14 @@ export function createApp(d: {
   clientIp?: (c: Context) => string;
   /** The vault's owner key hashes from its on-chain config, or undefined when there's no vault. */
   owners: (policy: string) => Promise<string[] | undefined>;
-  /** Broadcast a fully signed tx. */
-  submit: (txCbor: string) => Promise<{ ok: true; hash: string } | { ok: false; error: string }>;
-  /** Test seam: the native-asset units a tx's outputs carry. */
-  unitsMoved?: (txCbor: string) => string[];
+  /** Broadcast a fully signed tx; `transient` marks errors worth retrying (network, 429, 5xx). */
+  submit: (txCbor: string) => Promise<SubmitResult>;
+  /** An allowance's current UTxO and agent key, from the chain. */
+  allowanceOf: (policy: string, unit: string) => Promise<{ ref: string; agent: string } | undefined>;
+  /** The network vault ids must be on ("Preprod" or "Custom"). */
+  network?: string;
+  maxOpenPerVault?: number;
+  maxOpenPerKey?: number;
 }) {
   const now = d.now ?? Date.now;
   const perMinute = d.perMinute ?? 600;
@@ -48,16 +53,31 @@ export function createApp(d: {
   let cacheBytes = 0;
   const hits = new Map<string, { minute: number; n: number }>();
   const app = new Hono();
+  app.onError((e, c) => (e instanceof SyntaxError ? c.json({ error: "malformed JSON" }, 400) : c.json({ error: "server error" }, 500)));
+  // Everything but the chain proxy (which has its own bucket): sign-in, inbox, requests.
+  app.use("*", async (c, next) => {
+    if (c.req.path.startsWith("/chain/") || c.req.method === "GET" && !/^\/(me|vaults|pending)\//.test(c.req.path)) return next();
+    if (limited(`api:${clientIp(c)}`)) return c.json({ error: "too many requests" }, 429);
+    return next();
+  });
+  app.use("*", bodyLimit({ maxSize: 128 * 1024, onError: (c) => c.json({ error: "request too large" }, 413) }));
   const auth = mountAuth(app, { store: d.store, now, owners: d.owners });
-  mountPending(app, { store: d.store, now, owners: d.owners, submit: d.submit, upstream: d.upstream, unitsMoved: d.unitsMoved ?? unitsInOutputs }, auth);
+  mountPending(
+    app,
+    {
+      store: d.store, now, owners: d.owners, submit: d.submit, upstream: d.upstream, allowanceOf: d.allowanceOf, network: d.network,
+      maxOpenPerVault: d.maxOpenPerVault ?? 50, maxOpenPerKey: d.maxOpenPerKey ?? 20,
+    },
+    auth,
+  );
 
-  const limited = (ip: string) => {
+  function limited(ip: string) {
     const minute = Math.floor(now() / 60_000);
     if (hits.size > 10_000) for (const [k, v] of hits) if (v.minute !== minute) hits.delete(k);
     const h = hits.get(ip);
     if (!h || h.minute !== minute) return hits.set(ip, { minute, n: 1 }), false;
     return ++h.n > perMinute;
-  };
+  }
   const fetchWithRetry = async (key: string) => {
     for (let attempt = 0; ; attempt++) {
       try {

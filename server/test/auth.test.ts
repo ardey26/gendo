@@ -7,7 +7,7 @@ import { policy, signIn, store, wallet } from "./helpers.js";
 describe("sign-in", () => {
   const a = wallet();
   const mk = (now = () => Date.now()) =>
-    createApp({ store: store(), now, upstream: async () => new Response("{}"), owners: async (p) => (p === policy ? [a.pkh] : undefined), submit: async () => ({ ok: false, error: "unused" }) });
+    createApp({ store: store(), now, upstream: async () => new Response("{}"), owners: async (p) => (p === policy ? [a.pkh] : undefined), allowanceOf: async () => undefined, submit: async () => ({ ok: false, error: "unused" }) });
 
   it("a wallet that signs the challenge gets a session for its key", async () => {
     const r = await signIn(mk(), a);
