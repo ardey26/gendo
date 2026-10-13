@@ -60,9 +60,10 @@ const ada = (n: bigint) => `${Number(n) / 1e6} ADA`;
 
 /**
  * `resolvedInputs` must cover the tx's inputs and collateral inputs; get them with
- * `verifiedOutputs` so a relay can't forge them. `viewer` is the signing owner's key hash.
+ * `verifiedOutputs` so a relay can't forge them. `viewer` is the signing owner's key hash, or
+ * every key hash their wallet holds (an HD wallet signs for all of its keys).
  */
-export function explainTx(txCbor: string, vault: Vault, resolvedInputs: UTxO[], opts: { viewer?: string } = {}): Explanation {
+export function explainTx(txCbor: string, vault: Vault, resolvedInputs: UTxO[], opts: { viewer?: string | string[] } = {}): Explanation {
   const byRef = new Map(resolvedInputs.map((u) => [`${u.txHash}#${u.outputIndex}`, u]));
   const summary = describeTx(txCbor, {
     vault,
@@ -150,8 +151,9 @@ export function explainTx(txCbor: string, vault: Vault, resolvedInputs: UTxO[], 
   const collateralAtRisk = collIns.length ? [{ address: collIns[0]!.address, lovelace: collTotal - returned }] : [];
 
   // Said to the viewer directly.
-  if (opts.viewer) {
-    const mine = (a: string) => keyOf(a) === opts.viewer;
+  const viewers = opts.viewer === undefined ? [] : Array.isArray(opts.viewer) ? opts.viewer : [opts.viewer];
+  if (viewers.length) {
+    const mine = (a: string) => viewers.includes(keyOf(a) ?? "");
     let out = 0n;
     for (const f of flows) if (mine(f.address)) out -= f.delta.lovelace ?? 0n;
     const tokensOut = flows.some((f) => mine(f.address) && Object.entries(f.delta).some(([u, n]) => u !== "lovelace" && n < 0n));
@@ -159,7 +161,7 @@ export function explainTx(txCbor: string, vault: Vault, resolvedInputs: UTxO[], 
     for (const c of collateralAtRisk)
       if (mine(c.address) && c.lovelace > 5_000_000n) warnings.push(`if its scripts fail, you lose up to ${ada(c.lovelace)} of collateral`);
     for (const c of changes)
-      if (c.kind === "config" && c.before?.owners.includes(opts.viewer) && c.after && !c.after.owners.includes(opts.viewer))
+      if (c.kind === "config" && viewers.some((v) => c.before?.owners.includes(v) && c.after && !c.after.owners.includes(v)))
         warnings.push("it removes you as an owner");
   }
 

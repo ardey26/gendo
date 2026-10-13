@@ -155,4 +155,12 @@ describe("explainTx", () => {
     expect(u).toMatchObject({ txHash: hash, outputIndex: 0, address: vault.address, assets: { lovelace: 9n * ADA } });
     await expect(verifiedOutputs(async () => other, [`${hash}#0`])).rejects.toThrow(/doesn't match/);
   });
+  it("'your wallet' covers every key the viewer's wallet holds", async () => {
+    lucid.selectWallet.fromPrivateKey(w.a.privateKey);
+    const [bUtxo] = await lucid.utxosAt(w.b.address);
+    const tx = await lucid.newTx().collectFrom([bUtxo!]).pay.ToAddress(w.stranger.address, { lovelace: 50n * ADA }).addSignerKey(w.b.pkh).complete();
+    const e = explainTx(tx.toCBOR(), vault, await inputsOf(tx.toCBOR()), { viewer: [w.c.pkh, w.b.pkh] });
+    expect(e.warnings.join(" ")).toMatch(/takes .* from your wallet/);
+  });
 });
+
