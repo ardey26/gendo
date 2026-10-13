@@ -124,7 +124,7 @@ export function startSigner(opts: SignerOptions): Promise<Server> {
     if (!decision.ok) return refuse(facts.hash, decision.reason);
 
     if (!reSign) {
-      state.signed.push({ at: t, assets: decision.out });
+      if (!decision.coSigned) state.signed.push({ at: t, assets: decision.out }); // escalations don't count against the agent's budget
       state.intents[intentId] = { ...facts, at: t };
     }
     saveState(opts.statePath, state, t); // persisted BEFORE the witness leaves

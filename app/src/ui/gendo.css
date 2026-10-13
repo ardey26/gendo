@@ -1,0 +1,90 @@
+/* The gendo design system, merged from the UI draft's screens. */
+body{margin:0;background:#0d0b09}
+.app{font-family:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;color:#efe7d8;background:#0d0b09;font-size:14px;line-height:1.45;min-height:100vh}
+.mono{font-variant-numeric:tabular-nums}
+.code{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+.kj{font-family:"Shippori Mincho B1","Hiragino Mincho ProN",serif;font-weight:700}
+.cap{font-family:inherit;font-variant-numeric:tabular-nums;font-size:12px;color:#8f8578}
+.pill{font-family:inherit;font-variant-numeric:tabular-nums;font-size:12px;color:#b9afa0;white-space:nowrap;border:0;padding:0;background:none}
+.pill.seal,.pill.dead,.pill.fill{color:#e0452b}
+.pill.fill{font-weight:500}
+.count{margin-left:auto;font-family:inherit;font-variant-numeric:tabular-nums;font-size:12px;font-weight:500;color:#e0452b}
+.btn{font-family:inherit;font-size:13px;font-weight:500;padding:4px 10px;line-height:1.2;border-radius:6px;border:1px solid #3a332b;background:#1a1612;color:#efe7d8;cursor:pointer;min-height:28px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:#8f8578;color:#efe7d8}
+.panel{border:1px solid #2a241e;border-radius:10px;background:#120e0b;overflow:hidden}
+.ph{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid #2a241e}
+.ph h2{margin:0;font-size:14px;font-weight:700;display:flex;gap:8px;align-items:baseline}
+.scroll{overflow-x:auto}
+table.t{width:100%;border-collapse:collapse;font-size:13px}
+.t th{font-family:inherit;font-variant-numeric:tabular-nums;font-size:12px;color:#8f8578;font-weight:400;text-align:left;padding:8px 14px;border-bottom:1px solid #2a241e;white-space:nowrap}
+.t td{padding:11px 14px;border-bottom:1px solid #2a241e;vertical-align:middle}
+.t tr:last-child td{border-bottom:0}
+.t tbody tr:hover td{background:#15120f}
+.num{text-align:right;font-family:inherit;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bar{position:relative;height:6px;background:#241e18;border-radius:999px;min-width:120px}
+.muted{color:#b9afa0}.faint{color:#8f8578}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr));gap:1px;background:#2a241e}
+.kv>div{background:#120e0b;padding:10px 14px;display:flex;flex-direction:column;gap:3px}
+a{color:#efe7d8}a:hover{color:#e0452b}
+.netband{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;padding:5px 20px;font-size:12px;line-height:1.3;color:#b9afa0;background:repeating-linear-gradient(-45deg,#15120f 0 10px,#1a1612 10px 20px);border-bottom:1px solid #2a241e}
+.netband b{color:#efe7d8;font-weight:700}
+.panel:has(.tip){overflow:visible}
+.tip{position:relative;display:inline-flex;width:16px;height:16px;border-radius:999px;border:1px solid #3a332b;background:transparent;color:#8f8578;font-family:inherit;font-variant-numeric:tabular-nums;font-size:10px;font-weight:400;align-items:center;justify-content:center;cursor:help;padding:0;align-self:center;flex-shrink:0;text-transform:none;letter-spacing:0}
+.tip:hover,.tip:focus-visible{color:#efe7d8;border-color:#8f8578}
+.tip::after{content:attr(data-tip);position:absolute;left:0;top:calc(100% + 8px);width:max-content;max-width:280px;padding:7px 10px;background:#efe7d8;color:#0d0b09;font-family:"Zen Kaku Gothic New",system-ui,sans-serif;font-size:12px;font-weight:500;line-height:1.4;border-radius:6px;text-align:left;opacity:0;pointer-events:none;z-index:10;white-space:normal}
+.tip:hover::after,.tip:focus-visible::after{opacity:1}
+.btn.pri{background:#efe7d8;color:#0d0b09;border-color:#efe7d8}
+.btn.pri:hover{background:#ffffff;color:#0d0b09}
+.wallet{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;font-family:inherit;font-size:14px;font-weight:500;color:#efe7d8;background:#15120f;border:1px solid #2a241e;border-radius:8px;padding:12px 14px;cursor:pointer;min-height:48px}
+.wallet:hover{border-color:#8f8578}
+.wico{display:inline-flex;width:24px;height:24px;border-radius:6px;border:1px dashed #3a332b;background:#1a1612;color:#8f8578;font-size:11px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0}
+.shell{display:flex;flex-wrap:wrap;min-height:100vh}
+.side{flex:1 1 232px;border-right:1px solid #2a241e;background:#0f0d0a;padding:12px 10px;display:flex;flex-direction:column;gap:2px;box-sizing:border-box}
+.content{flex:999 1 560px;min-width:0;display:flex;flex-direction:column}
+.nav{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;color:#b9afa0;text-decoration:none;font-size:13px;background:transparent;border:0;font-family:inherit;cursor:pointer;text-align:left;width:100%;box-sizing:border-box}
+.nav:hover{background:#15120f;color:#efe7d8}
+.nav.on{background:#1a1612;color:#efe7d8}
+.sidecap{padding:14px 10px 4px}
+.top{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid #2a241e;min-height:52px;box-sizing:border-box}
+.btn[disabled]{opacity:.45;cursor:default}
+.step{display:flex;gap:10px;align-items:center;width:100%;text-align:left;font-family:inherit;font-size:13px;background:transparent;border:0;border-bottom:1px solid #2a241e;padding:10px 14px;cursor:pointer;color:#b9afa0}
+.step:last-child{border-bottom:0}
+.dot{display:inline-flex;width:22px;height:22px;border-radius:999px;align-items:center;justify-content:center;font-family:inherit;font-variant-numeric:tabular-nums;font-size:11px;border:1px solid #3a332b;flex-shrink:0}
+.field{display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr);gap:6px 16px;align-items:start;padding:12px 14px;border-bottom:1px solid #2a241e}
+.field label{font-size:13px;padding-top:7px;display:flex;gap:8px;align-items:baseline}
+.hint{grid-column:2;font-size:12px;color:#8f8578}
+input,select{font-family:inherit;font-variant-numeric:tabular-nums;font-size:13px;background:#110f0c;border:1px solid #3a332b;color:#efe7d8;border-radius:6px;padding:7px 10px;min-height:34px;box-sizing:border-box;color-scheme:dark}
+input:focus,select:focus{outline:2px solid #e0452b;outline-offset:1px}
+.opt{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13px}
+pre{margin:0;font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:12px;line-height:1.55;background:#110f0c;border:1px solid #2a241e;border-radius:6px;padding:10px 12px;overflow-x:auto;color:#efe7d8}
+.btn.stop{background:transparent;border-color:#e0452b;color:#e0452b}
+.item{display:flex;flex-direction:column;gap:4px;width:100%;text-align:left;font-family:inherit;color:#efe7d8;background:transparent;border:0;border-bottom:1px solid #2a241e;padding:11px 14px;cursor:pointer;box-sizing:border-box}
+.item:hover{background:#15120f}
+.stamp{display:inline-flex;width:28px;height:28px;align-items:center;justify-content:center;background:#e0452b;color:#efe7d8;border-radius:5px;box-shadow:inset 0 0 0 2px #120e0b,inset 0 0 0 3px #e0452b;font-family:"Shippori Mincho B1",serif;font-weight:800;font-size:13px}
+.slot{display:inline-flex;width:28px;height:28px;border:2px dashed #3a332b;border-radius:5px;box-sizing:border-box}
+.btn.stop:hover{background:#e0452b;color:#efe7d8}
+.tabs{display:flex;gap:2px;padding:0 20px;border-bottom:1px solid #2a241e;overflow-x:auto}
+.tab{font-family:inherit;font-size:13px;color:#b9afa0;background:transparent;border:0;border-bottom:2px solid transparent;padding:11px 12px;cursor:pointer;white-space:nowrap}
+.tab:hover{color:#efe7d8}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #2a241e}
+.row:last-child{border-bottom:0}
+.chip{font-family:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid #3a332b;background:transparent;color:#b9afa0;cursor:pointer}
+input{font-family:inherit;font-variant-numeric:tabular-nums;font-size:13px;background:#110f0c;border:1px solid #3a332b;color:#efe7d8;border-radius:6px;padding:7px 10px;min-height:32px;box-sizing:border-box}
+.vid{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;box-sizing:border-box;margin:2px 0 6px;padding:6px 10px;background:#110f0c;border:1px solid #2a241e;border-radius:6px;color:#b9afa0;font-family:inherit;font-variant-numeric:tabular-nums;font-size:12px;cursor:copy;text-align:left}
+.vid:hover{border-color:#3a332b;color:#efe7d8}
+.field:last-child{border-bottom:0}
+.kvrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:1px solid #2a241e;font-size:13px}
+.tip.r::after{left:auto;right:0}
+.err{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px;font-size:14px}
+.ico{display:inline-flex;width:20px;height:20px;border-radius:999px;align-items:center;justify-content:center;font-family:inherit;font-variant-numeric:tabular-nums;font-size:12px;font-weight:500;flex-shrink:0}
+.tab.on{color:#efe7d8;border-bottom-color:#e0452b}
+.bar>i{position:absolute;left:0;top:0;bottom:0;background:#e0452b;border-radius:999px}
+.banner{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:8px 20px;background:#e0452b;color:#efe7d8;font-size:13px;font-weight:700}
+.note{padding:10px 12px;border:1px solid #2a241e;border-radius:8px;font-size:13px}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid #3a332b;border-top-color:#e0452b;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;flex-shrink:0;box-sizing:border-box}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.spin{animation-duration:2.4s}}
+.busy{display:inline-flex;gap:8px;align-items:center}
+/* Selects: the native arrow sits flush against the edge; draw our own with room on the right. */
+select{appearance:none;-webkit-appearance:none;padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23b9afa0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5l3 3 3-3'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:12px 12px;cursor:pointer}
+select:hover{border-color:#8f8578}

@@ -17,6 +17,8 @@ export type SignerPolicy = {
   maxPerDay: Assets;
   /** Refuse txs whose TTL is further than this from now (pre-signed tx shelf life). */
   maxTtlMs: number;
+  /** TTL cap for co-signed escalations, which owners sign on their own machines over hours. Defaults to maxTtlMs. */
+  maxCoSignedTtlMs?: number;
   allowCoSigned: boolean;
   slot: { zeroTime: number; zeroSlot: number; slotLength: number };
 };
@@ -24,7 +26,22 @@ export type SignerPolicy = {
 export type { SignerState } from "./state.js";
 import type { SignerState } from "./state.js";
 
-export type Decision = { ok: true; out: Assets } | { ok: false; reason: string };
+export type Decision = { ok: true; out: Assets; coSigned?: true } | { ok: false; reason: string };
+
+/** Constructor index of the spend redeemer on input 0 (the allowance): 0 AgentSpend, 1 CoSignedSpend. */
+function spendRedeemerIndex(tx: CML.Transaction): bigint | undefined {
+  const reds = tx.witness_set().redeemers();
+  const map = reds?.as_map_redeemer_key_to_redeemer_val();
+  if (map) {
+    const ks = map.keys();
+    for (let i = 0; i < ks.len(); i++)
+      if (ks.get(i).tag() === CML.RedeemerTag.Spend && ks.get(i).index() === 0n) return map.get(ks.get(i))!.data().as_constr_plutus_data()?.alternative();
+  }
+  const legacy = reds?.as_arr_legacy_redeemer();
+  for (let i = 0; legacy && i < legacy.len(); i++)
+    if (legacy.get(i).tag() === CML.RedeemerTag.Spend && legacy.get(i).index() === 0n) return legacy.get(i).data().as_constr_plutus_data()?.alternative();
+  return undefined;
+}
 
 export function evaluate(policy: SignerPolicy, state: SignerState, txCbor: string, now: number): Decision {
   let tx: CML.Transaction;
@@ -39,7 +56,9 @@ export function evaluate(policy: SignerPolicy, state: SignerState, txCbor: strin
   const signers: string[] = [];
   for (let i = 0; req && i < req.len(); i++) signers.push(req.get(i).to_hex());
   if (!signers.includes(policy.agentKeyHash)) return { ok: false, reason: "agent key is not a required signer" };
-  const coSigned = signers.length > 1;
+  // Co-signed means the CoSignedSpend redeemer, which the chain only accepts with the owners'
+  // threshold. Extra required signers on an ordinary spend earn nothing.
+  const coSigned = spendRedeemerIndex(tx) === 1n;
   if (coSigned && !policy.allowCoSigned) return { ok: false, reason: "co-signed spends are disabled for this signer" };
 
   // Agent and over-limit spends both draw from the allowance UTxO alone.
@@ -49,7 +68,8 @@ export function evaluate(policy: SignerPolicy, state: SignerState, txCbor: strin
   const ttl = body.ttl();
   if (ttl === undefined) return { ok: false, reason: "tx has no upper validity bound" };
   const ttlMs = policy.slot.zeroTime + (Number(ttl) - policy.slot.zeroSlot) * policy.slot.slotLength;
-  if (ttlMs - now > policy.maxTtlMs) return { ok: false, reason: `ttl ${ttlMs - now}ms exceeds signer max ${policy.maxTtlMs}ms` };
+  const cap = coSigned ? (policy.maxCoSignedTtlMs ?? policy.maxTtlMs) : policy.maxTtlMs;
+  if (ttlMs - now > cap) return { ok: false, reason: `ttl ${ttlMs - now}ms exceeds signer max ${cap}ms` };
 
   // Everything that leaves: the fee plus every asset paid to a destination.
   const paid: Assets[] = [{ lovelace: body.fee() }];
@@ -62,7 +82,8 @@ export function evaluate(policy: SignerPolicy, state: SignerState, txCbor: strin
       continuing.push(o);
       continue;
     }
-    if (!policy.destinations.includes(addr)) return { ok: false, reason: `destination ${addr} not allowed by signer policy` };
+    // An escalation may pay anyone: the owners approve each payee.
+    if (!coSigned && !policy.destinations.includes(addr)) return { ok: false, reason: `destination ${addr} not allowed by signer policy` };
     paid.push(valueToAssets(o.amount()));
   }
   if (continuing.length !== 1) return { ok: false, reason: "expected exactly one continuing output at the vault" };
@@ -71,6 +92,8 @@ export function evaluate(policy: SignerPolicy, state: SignerState, txCbor: strin
   if (valueToAssets(continuing[0]!.amount())[policy.allowanceUnit] !== 1n)
     return { ok: false, reason: `continuing output does not carry allowance ${policy.allowanceUnit}` };
   const out = add(...paid);
+  // The owners' threshold authorizes an escalation; the agent's own budget and rate are for its unilateral spends.
+  if (coSigned) return { ok: true, out, coSigned: true };
 
   const hourAgo = now - 3_600_000;
   const dayAgo = now - 86_400_000;

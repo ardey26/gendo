@@ -18,6 +18,7 @@ import {
   assertNotPaid,
   blockfrostQuery,
   txFacts,
+  liveness as coreLiveness,
   payOnce,
   submitResolving,
   connect,
@@ -27,6 +28,9 @@ import {
   generatePrivateKey,
   listAllowances,
   makeVault,
+  formatVaultId,
+  parseVaultId as coreParseVaultId,
+  type VaultId,
   owner,
   providerFromEnv,
   readAllowance,
@@ -106,18 +110,13 @@ async function submitSafely(lucid: LucidEvolution, signedCbor: string, intent?: 
  * One line that identifies a vault, for owners and operators to share instead
  * of copying state.json: `gendo:<network>:<seed tx>#<i>[:<ref-script tx>#<i>]`.
  */
-const vaultId = (s: State) =>
-  ["gendo", s.network.toLowerCase(), `${s.seed.txHash}#${s.seed.outputIndex}`, ...(s.refScript ? [`${s.refScript.txHash}#${s.refScript.outputIndex}`] : [])].join(":");
-
+const vaultId = (s: State) => formatVaultId(s as VaultId);
 function parseVaultId(id: string): State {
-  const ref = (x: string) => {
-    const m = /^([0-9a-f]{64})#(\d+)$/.exec(x);
-    return m ? { txHash: m[1]!, outputIndex: Number(m[2]) } : die(`bad vault id part ${x}`);
-  };
-  const [tag, net, seed, refScript, ...extra] = id.split(":");
-  if (tag !== "gendo" || !net || !seed || extra.length) die("a vault id looks like gendo:preprod:<tx>#<i>[:<tx>#<i>]");
-  const network = { preprod: "Preprod", custom: "Custom" }[net!] ?? die(`unknown network ${net}`);
-  return { network, seed: ref(seed!), ...(refScript ? { refScript: ref(refScript) } : {}) };
+  try {
+    return coreParseVaultId(id);
+  } catch (e) {
+    return die((e as Error).message);
+  }
 }
 
 function vaultOf(lucid: LucidEvolution): Vault {
@@ -147,26 +146,23 @@ const expiresAt = (lucid: LucidEvolution, ttlSlot?: string) =>
  */
 async function liveness(lucid: LucidEvolution, cbor: string) {
   const facts = txFacts(lucid, cbor);
-  const q = chainQuery();
-  const expires = new Date(facts.ttlMs).toISOString();
-  if (await q.txExists(facts.hash)) return { state: "landed" as const, reason: `already on-chain as ${facts.hash}` };
-  for (const i of facts.inputs) {
-    let by = await q.spenderOf(i.txHash, i.index);
-    if (by === facts.hash) return { state: "landed" as const, reason: `already on-chain as ${facts.hash}` };
+  const isUnspent = async (txHash: string, index: number) => {
     // Providers without a spender index: an input missing from its address's unspent set is gone.
     // (A lookup by reference returns the output even after it was spent.)
-    if (by === undefined) {
-      const [o] = await lucid.utxosByOutRef([{ txHash: i.txHash, outputIndex: i.index }]);
-      if (o && !(await lucid.utxosAt(o.address)).some((u) => u.txHash === i.txHash && u.outputIndex === i.index)) by = "another tx";
-    }
-    if (typeof by === "string")
-      return {
-        state: "dead" as const,
-        reason: `its input ${i.txHash}#${i.index} was spent by ${by === "another tx" ? by : `tx ${by}`} (for an escalation: the agent made another payment). Ask whoever built it to build it again, then sign the new file`,
-      };
-  }
-  if (Date.now() >= facts.ttlMs) return { state: "dead" as const, reason: `it expired at ${expires}. Build it again with a longer --ttl` };
-  return { state: "submittable" as const, expiresAt: expires };
+    const [o] = await lucid.utxosByOutRef([{ txHash, outputIndex: index }]);
+    if (!o) return undefined;
+    return (await lucid.utxosAt(o.address)).some((u) => u.txHash === txHash && u.outputIndex === index);
+  };
+  const l = await coreLiveness(chainQuery(), facts, Date.now(), isUnspent);
+  if (l.state === "landed") return { state: "landed" as const, reason: `already on-chain as ${l.hash}` };
+  if (l.state === "dead")
+    return {
+      state: "dead" as const,
+      reason: l.reason.startsWith("it expired")
+        ? `${l.reason}. Build it again with a longer --ttl`
+        : `${l.reason} (for an escalation: the agent made another payment). Ask whoever built it to build it again, then sign the new file`,
+    };
+  return { state: "submittable" as const, expiresAt: new Date(l.expiresAtMs).toISOString() };
 }
 
 /** Refuse to sign or submit a tx that can't land, with the reason. */
@@ -647,6 +643,7 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
         "max-ada-per-day": { type: "string", default: "100" },
         "max-per-day": { type: "string" },
         "max-ttl": { type: "string", default: "15m" },
+        "max-cosigned-ttl": { type: "string", default: "2h" },
         "allow-cosigned": { type: "boolean" },
         audit: { type: "string" },
         "socket-mode": { type: "string", default: "600" },
@@ -658,6 +655,8 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
     // Like ssh: a key file anyone else can read isn't held by the signer alone.
     if (statSync(keyPath(k.name)).mode & 0o077) die(`${keyPath(k.name)} is readable by group or others; chmod 600 it`);
     const socketMode = ({ "600": 0o600, "660": 0o660 } as const)[v["socket-mode"] as "600" | "660"] ?? die("--socket-mode must be 600 or 660");
+    const coSignedTtl = Number(duration(v["max-cosigned-ttl"]!));
+    if (coSignedTtl > owner.MAX_OFFLINE_TTL_MS) die(`--max-cosigned-ttl can be at most ${owner.MAX_OFFLINE_TTL_MS / 3_600_000}h`);
     const { SLOT_CONFIG_NETWORK } = await import("./sdk.js");
     await startSigner({
       socketPath: v.socket ?? join(HOME, "signer.sock"),
@@ -685,6 +684,7 @@ const commands: Record<string, (argv: string[]) => Promise<void>> = {
           ),
         },
         maxTtlMs: Number(duration(v["max-ttl"]!)),
+        maxCoSignedTtlMs: coSignedTtl,
         allowCoSigned: !!v["allow-cosigned"],
         slot: SLOT_CONFIG_NETWORK[lucid.config().network!],
       },
@@ -709,7 +709,7 @@ const HELP = `vault <command>
   tx describe <tx.cbor> | tx witness <tx.cbor> --key k --out k.wit | tx assemble <tx.cbor> <wits...>
   --ttl 6h  how long an owner or over-limit tx stays submittable (default 10m, or 2h with --out; max 24h)
   signer start --key agent --allowance <unit> --dest addr1,addr2 [--socket path] [--max-ada-per-day N]
-               [--max-per-day unit:qty,...] [--max-tx-per-hour N] [--max-ttl 15m] [--allow-cosigned]
+               [--max-per-day unit:qty,...] [--max-tx-per-hour N] [--max-ttl 15m] [--allow-cosigned] [--max-cosigned-ttl 2h]
                [--socket-mode 600|660]   660: run the signer as its own OS user; the agent connects via the group
 env: VAULT_NETWORK=Preprod|Custom, BLOCKFROST_PROJECT_ID, VAULT_HOME`;
 

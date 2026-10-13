@@ -9,3 +9,4 @@ export function fromHex(hex: string): Uint8Array {
 }
 
 export const utf8ToHex = (s: string): string => toHex(new TextEncoder().encode(s));
+export const hexToUtf8 = (hex: string): string => new TextDecoder().decode(fromHex(hex));

@@ -85,6 +85,7 @@ VAULT_HOME=~/.gendo-signer cli/vault signer start --key agent --allowance <unit>
 - It keeps a daily budget per asset: lovelace from `--max-ada-per-day`, and each token from `--max-per-day <unit>:<qty>`. A token with no daily limit can't leave.
 - Its rate limits, budgets and intent-id dedupe table persist across restarts.
 - It refuses to start if the key file is readable by anyone but its owner.
+- With `--allow-cosigned` it also signs over-limit requests for the owners to co-sign. Those live for hours (owners sign on their own machines), so they get their own expiry cap: `--max-cosigned-ttl 2h` (default 2h, at most 24h). The agent's own spends keep `--max-ttl` (15 minutes). Only a real escalation (the CoSignedSpend redeemer, which the chain accepts only with the owners' signatures) gets the longer cap; it doesn't count against the signer's daily budget or rate, and it may pay an address off the signer's list, because the owners approve each one.
 - **Run it as its own OS user when the agent can run shell commands or read files.** Otherwise the agent can read the key file, and only the on-chain caps still apply (the stolen-key case). With `--socket-mode 660`, members of the socket's group can connect but can't read the key:
   ```bash
   # once, as root (Linux; checked by cli/test/signer-user.sh)
@@ -99,7 +100,7 @@ VAULT_HOME=~/.gendo-signer cli/vault signer start --key agent --allowance <unit>
 ## Paying (the agent)
 Your `VAULT_HOME` holds only the joined vault (`vault join <id>`) and your payment journal, never a key.
 
-**Preferred: the MCP server.** The operator registers `mcp/gendo-mcp --allowance <unit> --signer-socket <path>` (env: `VAULT_HOME`, `VAULT_NETWORK`, `BLOCKFROST_PROJECT_ID`). It gives you three tools: `get_budget`, `pay` and `request_approval`. Each refusal comes back with a `code` and a `next_step`. The rules below apply the same way.
+**Preferred: the MCP server.** The operator registers `mcp/gendo-mcp --allowance <unit> --signer-socket <path>` (env: `VAULT_HOME`, `VAULT_NETWORK`, `BLOCKFROST_PROJECT_ID`). It gives you three tools: `get_budget`, `pay` and `request_approval`. Each refusal comes back with a `code` and a `next_step`. The rules below apply the same way. When the owners use the gendo app, also set `GENDO_SERVER` (the app's URL) and `GENDO_AGENT_TOKEN` (the token an owner issues for this allowance in the app): `request_approval` then sends the request to the owners' inbox instead of writing a file.
 
 **Or the CLI:**
 1. **Pay with an intent id** derived from the business object, such as the invoice number:

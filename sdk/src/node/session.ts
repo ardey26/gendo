@@ -9,7 +9,7 @@ import { buildOverLimitSpend } from "../core/agent.js";
 import { fromPlutusAddress } from "../core/address.js";
 import { readAllowance, readConfig } from "../core/chain.js";
 import { describeTx } from "../core/cosign.js";
-import { AlreadyPaid, assertNotPaid, blockfrostQuery, type ChainQuery, type IntentJournal } from "../core/idempotency.js";
+import { AlreadyPaid, assertNotPaid, blockfrostQuery, txFacts, txFate, type ChainQuery, type IntentJournal } from "../core/idempotency.js";
 import { FileJournal } from "./journal.js";
 import { INTENT_LABEL } from "../core/intent.js";
 import { floorDiv, unitOf } from "../core/limits.js";
@@ -164,31 +164,60 @@ export async function requestApproval(s: AgentSession, p: PaymentRequest & { rea
     const current = await readAllowance(s.lucid, s.vault, s.unit);
     await assertNotPaid(s.q, s.journal, s.unit, current.utxo.txHash, p.intent_id, INTENT_LABEL);
     const config = await readConfig(s.lucid, s.vault);
-    const w = await agentWallet(s, current.datum.agent);
-    const built = await buildOverLimitSpend({
-      lucid: s.lucid,
-      vault: s.vault,
-      allowance: current,
-      config,
-      collateral: w.collateral,
-      refScript: w.refScript,
-      tipMs: await s.q.tipMs(),
-      payments: [{ to: p.to, assets: toAssets(p.amount_ada, p.asset) }],
-      intentId: p.intent_id,
-      purpose: `${p.purpose} (owner approval: ${p.reason.slice(0, 80)})`,
-      cosigners: config.config.owners.slice(0, Number(config.config.threshold)),
-      // Owners sign on their own machines: give them hours, not the agent's minutes.
-      validityMs: Number(process.env.VAULT_TX_TTL_MS ?? offlineTtlMs(s.lucid.config().network!)),
-    });
     const dir = join(s.home, "approvals");
-    mkdirSync(dir, { recursive: true });
     const file = join(dir, `${p.intent_id.replace(/[^\w.-]/g, "_")}.cbor`);
-    writeFileSync(file, built.tx.toCBOR());
-    const ttlSlot = describeTx(built.tx.toCBOR()).validity.ttlSlot;
+    // A request built earlier that can still land is sent again unchanged: the signer re-signs
+    // the same body, while a new body for the same intent would wait for the old one's TTL.
+    let cbor: string | undefined;
+    if (existsSync(file)) {
+      const old = readFileSync(file, "utf8").trim();
+      if ((await txFate(s.q, txFacts(s.lucid, old), (await s.q.tipMs()) ?? Date.now(), 0)) === "unknown") cbor = old;
+    }
+    if (!cbor) {
+      const w = await agentWallet(s, current.datum.agent);
+      const built = await buildOverLimitSpend({
+        lucid: s.lucid,
+        vault: s.vault,
+        allowance: current,
+        config,
+        collateral: w.collateral,
+        refScript: w.refScript,
+        tipMs: await s.q.tipMs(),
+        payments: [{ to: p.to, assets: toAssets(p.amount_ada, p.asset) }],
+        intentId: p.intent_id,
+        purpose: `${p.purpose} (owner approval: ${p.reason.slice(0, 80)})`,
+        cosigners: config.config.owners.slice(0, Number(config.config.threshold)),
+        // Owners sign on their own machines: give them hours, not the agent's minutes.
+        validityMs: Number(process.env.VAULT_TX_TTL_MS ?? offlineTtlMs(s.lucid.config().network!)),
+      });
+      cbor = built.tx.toCBOR();
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(file, cbor);
+    }
+    const ttlSlot = describeTx(cbor).validity.ttlSlot;
+    const expires_at = ttlSlot ? new Date(s.lucid.slotToUnixTime(Number(ttlSlot))).toISOString() : undefined;
+    const server = process.env.GENDO_SERVER;
+    const token = process.env.GENDO_AGENT_TOKEN;
+    if (server && token) {
+      const res = await fetch(`${server.replace(/\/$/, "")}/requests`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ cbor, agentWitness: await s.sign(cbor), intentId: p.intent_id, purpose: p.purpose, reason: p.reason }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const body = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
+      if (!res.ok || !body.id) return { status: "blocked" as const, code: "SERVER", reason: body.error ?? `server answered ${res.status}` };
+      return {
+        status: "awaiting_owners" as const,
+        request_id: body.id,
+        expires_at,
+        note: "The owners see it in their inbox. Any other payment from this allowance before they sign makes it stale; if it goes dead, call request_approval again with the same intent_id.",
+      };
+    }
     return {
       status: "awaiting_owners" as const,
       file,
-      expires_at: ttlSlot ? new Date(s.lucid.slotToUnixTime(Number(ttlSlot))).toISOString() : undefined,
+      expires_at,
       note: "Hand this file to the owners. Any other payment from this allowance before they submit it makes it stale; if they report it dead, call request_approval again with the same intent_id.",
     };
   } catch (e) {

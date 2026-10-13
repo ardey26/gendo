@@ -66,6 +66,7 @@ The full walkthrough, with every command, is in [`skills/gendo/SKILL.md`](skills
      }
    }
    ```
+   With the owners on the gendo app, add `"GENDO_SERVER"` (the app's URL) and `"GENDO_AGENT_TOKEN"` (issued by an owner for this allowance) to `env`: `request_approval` then lands in the owners' inbox. The signer needs `--allow-cosigned` for that (escalations get their own expiry cap, `--max-cosigned-ttl`, default 2h).
 
 ## Guarantees
 
@@ -100,6 +101,10 @@ scripts/budget.sh                # max-size paths < 50% of the per-tx limit
 # SDK: unit + emulator flows
 cd sdk && npm ci && npx vitest run test/unit test/emulator
 
+# keyless server (chain proxy, listings) and the web app (public page, bundle-size guard)
+cd server && npm ci && npx vitest run
+cd app && npm ci && npx vitest run && npx vite build && node test/bundle-check.mjs
+
 # ledger-real: adversarial replay + double-pay + CLI + LLM agent on a local devnet (Docker)
 scripts/devnet.sh up
 cd sdk && npx vitest run test/yaci      # 38 attacks rejected for the expected reason + 6 double-pay scenarios
@@ -107,6 +112,9 @@ cli/test/smoke.sh                       # every CLI flow, 19 checks
 cli/test/separated.sh                   # the skill's setup with owners, signer and agent in separate homes
 cli/test/signer-user.sh                 # the signer as its own Linux user (runs in a container)
 mcp/test/e2e.sh                         # an MCP client driving the agent's three tools
+app/test/public-e2e.sh                  # the public vault page in headless Chrome, served by the keyless server
+app/test/owner-e2e.sh                   # two owners in two headless browsers: sign in, pause, unpause, a budget raise through the inbox
+server/test/approvals-e2e.sh            # owners sign in, pause, unpause and approve an agent request through the server
 agent/test/e2e.sh                       # LLM agent (local Ollama model) paying invoices through the signer
 
 # the same attack + double-pay suites against real preprod (PV11). One full run makes about
@@ -339,7 +347,7 @@ The adversary is a compromised agent key that builds arbitrary transactions.
 
 ## Roadmap
 Not built yet. None of this is a guarantee until it ships with tests and an audit.
-- **An owner control panel in the browser** (in progress): owners sign with their own CIP-30 wallets, see every change computed from the chain before signing, and approve agent requests; plus a public read-only page per vault. It uses a small keyless server for pending approvals and notifications. **That server can affect liveness, never custody:** if it's down or hostile, approvals and notifications stop, but no funds can move without owners' wallets, and the CLI remains the fallback for every owner action.
+- **The owner app, next steps.** It exists today (preprod; `server/gendo-server` serves it): owners sign in with their own CIP-30 wallets, see every change computed from the chain before signing, approve agent requests, pause, and edit agents; plus a public read-only page per vault. Still to come: creating a vault in the app (a wizard with invite links), notifications, and an activity feed that includes revoked agents and treasury movements. It uses a small keyless server for pending approvals and notifications. **That server can affect liveness, never custody:** if it's down or hostile, approvals and notifications stop, but no funds can move without owners' wallets, and the CLI remains the fallback for every owner action.
 - **DeFi through per-protocol adapters.** Opt-in per protocol. Each adapter is a small validator, audited before it ships, that forces all proceeds back to the vault. The first target is Minswap V2 swaps. Design and preprod verifications: `docs/DEFI_SPIKE.md`.
 - **Sharded sub-allowances** to lift the one-spend-per-block limit (see [Known limitations](#known-limitations)).
 - **A sliding window** in place of fixed windows, removing the 2× burst.
@@ -363,10 +371,14 @@ Not built yet. None of this is a guarantee until it ships with tests and an audi
 ## Repository layout and versions
 ```
 onchain/            Aiken project: validators/{vault,ref_holder}.ak, lib/vault/*.ak (+ *.test.ak)
-sdk/src/            data, vault, chain, limits (on-chain mirror), agent, owner, cosign, intent, guards, provider, signer/
+sdk/src/core/       browser-safe: data, vault, chain, limits (on-chain mirror), agent, owner, cosign, intent, guards, provider
+sdk/src/node/       Node-only: journal, session, signer/
+sdk/src/read/       Lucid-free reads for the public page: Plutus data decoder, datums, vault state, payment history
 sdk/test/           unit/, emulator/ (honest flows), yaci/ (attacker builder + adversarial replay on a real node)
 cli/                `cli/vault` + test/smoke.sh, test/separated.sh, test/signer-user.sh
 mcp/                MCP server for the paying agent (`mcp/gendo-mcp`) + test/e2e.sh
+app/                web app: the public vault page (/w/<policy id>) + test/public-e2e.sh
+server/             keyless server: allowlisted chain proxy, public listings, the built app
 agent/              LLM accounts-payable agent (`agent/run`) + test/e2e.sh
 demo/               preprod.sh (+ RESULTS.md after a run)
 scripts/            aiken.sh, mutate.sh, mutate-all.sh, mutations.tsv, budget.sh, devnet.sh
@@ -379,7 +391,12 @@ Test counts at the time of writing:
 |---|---|
 | On-chain Aiken tests | 210 (196 unit/adversarial, 14 property) |
 | Mutations killed (each by at least one unit test, so no kill depends on a property test's luck) | 85 |
-| SDK unit + emulator tests | 64 |
+| SDK unit + emulator tests | 146 |
+| Keyless server (chain proxy, listings, sign-in, inbox, agent requests, limits) | 42 |
+| App (formatting, routes, what a pending tx does, inbox status and polling, agent form and edit rules, recipes and rebuild matching, vault list, API and wallet errors) | 40 |
+| Owner app end to end (devnet, two owners in two headless browsers) | 10 checks |
+| Public page end to end (devnet, headless Chrome) | 8 checks |
+| Approvals through the server (devnet: sign-in, single-owner pause, 2-of-2 unpause, an agent request via MCP, server down and retry) | 8 checks |
 | Adversarial replays (devnet PV10; preprod PV11) | 38 on devnet; 34 on preprod |
 | Double-pay scenarios incl. signer dedupe (devnet and preprod) | 6 each |
 | CLI smoke checks | 19 |
@@ -389,7 +406,7 @@ Test counts at the time of writing:
 | LLM agent end-to-end (devnet) | safety checks pass; escalation co-signed |
 | Preprod demo (all links in `demo/RESULTS.md`) | 16 txs, 11 refusals, including two LLM agent runs |
 
-Every devnet suite above has been re-run against the current vault hash, which adds the emergency pause. Preprod (34/34 attacks, 6/6 double-pay) was last run on the build just before it, and the 4 pause replays have not run on preprod yet. The preprod demo (`demo/RESULTS.md`) is from an earlier build.
+Every devnet suite above has been re-run against the current vault hash, which adds the emergency pause. Preprod (34/34 attacks, 6/6 double-pay) was last run on the build just before it, and the 4 pause replays have not run on preprod yet; a single-owner pause built in the browser and signed in Lace has landed on preprod. The preprod demo (`demo/RESULTS.md`) is from an earlier build.
 
 ## License
 

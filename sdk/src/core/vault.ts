@@ -74,3 +74,22 @@ export function allowanceName(ref: OutRef): Hex {
 }
 
 export const blake2b256 = (bytes: Uint8Array): Hex => toHex(blake2b(bytes, { dkLen: 32 }));
+
+/** A vault's one-line id, shared by owners and operators: gendo:<network>:<seed tx>#<i>[:<ref-script tx>#<i>]. */
+export type VaultId = { network: Network; seed: OutRef; refScript?: OutRef };
+
+export const formatVaultId = (v: VaultId) =>
+  ["gendo", v.network.toLowerCase(), `${v.seed.txHash}#${v.seed.outputIndex}`, ...(v.refScript ? [`${v.refScript.txHash}#${v.refScript.outputIndex}`] : [])].join(":");
+
+export function parseVaultId(id: string): VaultId {
+  const ref = (x: string): OutRef => {
+    const m = /^([0-9a-f]{64})#(\d{1,5})$/.exec(x);
+    if (!m) throw new Error(`bad vault id part ${x}`);
+    return { txHash: m[1]!, outputIndex: Number(m[2]) };
+  };
+  const [tag, net, seed, refScript, ...extra] = id.trim().split(":");
+  if (tag !== "gendo" || !net || !seed || extra.length) throw new Error("a vault id looks like gendo:preprod:<tx>#<i>[:<tx>#<i>]");
+  const network = ({ preprod: "Preprod", custom: "Custom" } as Record<string, Network>)[net];
+  if (!network) throw new Error(`unknown network ${net}`);
+  return { network, seed: ref(seed), ...(refScript ? { refScript: ref(refScript) } : {}) };
+}

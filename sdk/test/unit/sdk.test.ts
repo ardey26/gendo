@@ -124,7 +124,7 @@ describe("signer policy", () => {
       ma.set(CML.ScriptHash.from_hex(u.slice(0, 56)), CML.AssetName.from_raw_bytes(Buffer.from(u.slice(56), "hex")), q);
     return CML.Value.new(lovelace, ma);
   };
-  const mkTx = (opts: { to?: string; lovelace?: bigint; ttl?: bigint; signer?: string; inputs?: number; carries?: string; pays?: Record<string, bigint> }) => {
+  const mkTx = (opts: { to?: string; lovelace?: bigint; ttl?: bigint; signer?: string; extraSigner?: string; inputs?: number; carries?: string; pays?: Record<string, bigint> }) => {
     const ins = CML.TransactionInputList.new();
     for (let i = 0; i < (opts.inputs ?? 1); i++) ins.add(CML.TransactionInput.new(CML.TransactionHash.from_hex("11".repeat(32)), BigInt(i)));
     const outs = CML.TransactionOutputList.new();
@@ -134,6 +134,7 @@ describe("signer policy", () => {
     body.set_ttl(opts.ttl ?? 1_000n);
     const req = CML.Ed25519KeyHashList.new();
     req.add(CML.Ed25519KeyHash.from_hex(opts.signer ?? agentPkh));
+    if (opts.extraSigner) req.add(CML.Ed25519KeyHash.from_hex(opts.extraSigner));
     body.set_required_signers(req);
     return CML.Transaction.new(body, CML.TransactionWitnessSet.new(), true).to_cbor_hex();
   };
@@ -158,6 +159,10 @@ describe("signer policy", () => {
     expect(evaluate(policy, empty(), mkTx({ ttl: 10_000n }), now).ok).toBe(false);
     expect(evaluate(policy, empty(), mkTx({ signer: k(9) }), now).ok).toBe(false);
     expect(evaluate(policy, empty(), mkTx({ inputs: 2 }), now).ok).toBe(false);
+  });
+  it("an extra required signer on an ordinary spend doesn't earn the co-signed TTL", () => {
+    const co = { ...policy, allowCoSigned: true, maxCoSignedTtlMs: 24 * 3_600_000 };
+    expect(evaluate(co, empty(), mkTx({ extraSigner: k(9), ttl: 10_000n }), now)).toMatchObject({ ok: false, reason: expect.stringMatching(/ttl/) });
   });
   it("refuses extra inputs on the co-signed path too", () => {
     const co = { ...policy, allowCoSigned: true };
