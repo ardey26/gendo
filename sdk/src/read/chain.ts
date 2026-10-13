@@ -99,7 +99,8 @@ export async function readVault(get: Get, policy: string, network: ReadNetwork, 
   return { policy, address, config, treasuryLovelace, allowances };
 }
 
-type BfTxUtxos = { inputs: { tx_hash: string; amount: BfAmount[] }[]; outputs: { address: string; amount: BfAmount[] }[] };
+// `collateral` marks the collateral-return output: it goes back to the submitter, it isn't a payment.
+type BfTxUtxos = { inputs: { tx_hash: string; amount: BfAmount[] }[]; outputs: { address: string; amount: BfAmount[]; collateral?: boolean }[] };
 
 /** Newest first: each tx that spent this allowance, back to (not including) the grant. */
 export async function allowanceHistory(get: Get, unit: string, vaultAddress: string, fromTx: string, lookback = 20): Promise<PaymentView[]> {
@@ -124,7 +125,7 @@ export async function allowanceHistory(get: Get, unit: string, vaultAddress: str
       kind: intent?.kind === "agent_spend" ? "agent" : intent?.kind === "co_signed_spend" ? "co-signed" : "owner",
       ...(intent?.purpose !== undefined ? { purpose: intent.purpose } : {}),
       ...(intent?.id !== undefined ? { intentId: intent.id } : {}),
-      payees: io.outputs.filter((o) => o.address !== vaultAddress).map((o) => ({ address: o.address, lovelace: qty(o.amount, "lovelace") })),
+      payees: io.outputs.filter((o) => !o.collateral && o.address !== vaultAddress).map((o) => ({ address: o.address, lovelace: qty(o.amount, "lovelace") })),
     });
     cur = prev.tx_hash;
   }

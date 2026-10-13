@@ -163,7 +163,7 @@ describe("vault state from the chain", () => {
     const j = JSON.stringify(intent).match(/.{1,64}/g)!;
     const get: Get = async (path) => {
       if (path === "/txs/" + "b2".repeat(32) + "/utxos")
-        return { inputs: [{ tx_hash: "b1".repeat(32), output_index: 0, amount: [{ unit: unitA, quantity: "1" }] }], outputs: [{ address: payee, amount: [{ unit: "lovelace", quantity: "4000000" }] }, { address: addr, amount: [{ unit: unitA, quantity: "1" }] }] };
+        return { inputs: [{ tx_hash: "b1".repeat(32), output_index: 0, amount: [{ unit: unitA, quantity: "1" }] }], outputs: [{ address: payee, amount: [{ unit: "lovelace", quantity: "4000000" }] }, { address: addr, amount: [{ unit: unitA, quantity: "1" }] }, { address: "addr_test1vqagentcollateralreturn", collateral: true, amount: [{ unit: "lovelace", quantity: "9448236" }] }] };
       if (path === "/txs/" + "b2".repeat(32) + "/metadata") return [{ label: "7041", json_metadata: { h: "00", j } }];
       if (path === "/txs/" + "b2".repeat(32)) return { block_time: 1_790_000_100 };
       if (path === "/txs/" + "b1".repeat(32) + "/utxos") return { inputs: [{ tx_hash: "ff".repeat(32), output_index: 0, amount: [{ unit: "lovelace", quantity: "9" }] }], outputs: [] };
