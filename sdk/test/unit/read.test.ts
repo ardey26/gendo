@@ -99,3 +99,77 @@ describe("addresses without Lucid", () => {
     expect(scriptAddress(v.hash, "Preprod")).toBe(v.address);
   });
 });
+
+import { allowanceHistory, readVault, type Get } from "../../src/read/chain.js";
+import { utf8ToHex } from "../../src/core/bytes.js";
+
+describe("vault state from the chain", () => {
+  const policy = h(0x0a);
+  const addr = scriptAddress(policy, "Preprod");
+  const cfg = { owners: [h(1), h(2), h(3)], threshold: 2n, paused: false, maxTxValidityMs: 600_000n };
+  const unitA = policy + h(0x0b);
+  const day = 86_400_000n;
+  const allowance = (spent: bigint, windowStart: bigint): AllowanceDatum => ({
+    agent: h(9),
+    destinations: [{ payment: { type: "Key", hash: h(4) }, stake: null }],
+    caps: [{ policy: "", name: "", windowCap: 25_000_000n, txCap: 10_000_000n }],
+    spent: [spent],
+    windowStart,
+    periodMs: day,
+    expiresAt: windowStart + 30n * day,
+    maxFee: 1_000_000n,
+  });
+  const utxo = (tx: string, units: Record<string, string>, datum: string | null) => ({
+    tx_hash: tx, output_index: 0, inline_datum: datum,
+    amount: Object.entries(units).map(([unit, quantity]) => ({ unit, quantity })),
+  });
+  const fakeGet = (utxos: unknown[]): Get => async (path) => (path.startsWith(`/addresses/${addr}/utxos`) ? (path.includes("page=1") ? utxos : []) : undefined);
+  const t0 = 1_790_000_000_000n;
+  const cfgUtxo = utxo("c0".repeat(32), { lovelace: "2000000", [policy + utf8ToHex("config")]: "1" }, configToData(cfg));
+
+  it("reads config, treasury and an allowance with its budget", async () => {
+    const v = await readVault(fakeGet([cfgUtxo, utxo("a1".repeat(32), { lovelace: "60000000", [unitA]: "1" }, allowanceToData(allowance(3_000_000n, t0))), utxo("e0".repeat(32), { lovelace: "150000000" }, null)]), policy, "Preprod", Number(t0 + 3_600_000n));
+    expect(v!.config).toEqual(cfg);
+    expect(v!.treasuryLovelace).toBe(150_000_000n);
+    const a = v!.allowances[0]!;
+    expect(a.status).toBe("active");
+    expect(a.caps[0]).toMatchObject({ unit: "lovelace", perPayment: 10_000_000n, perPeriod: 25_000_000n, spentThisPeriod: 3_000_000n, leftThisPeriod: 22_000_000n });
+    expect(a.payees).toEqual([addressToBech32({ payment: { type: "Key", hash: h(4) }, stake: null }, "Preprod")]);
+  });
+  it("a period that rolled over shows nothing spent this period", async () => {
+    const v = await readVault(fakeGet([cfgUtxo, utxo("a1".repeat(32), { lovelace: "60000000", [unitA]: "1" }, allowanceToData(allowance(9_000_000n, t0)))]), policy, "Preprod", Number(t0 + 2n * day + 5n));
+    expect(v!.allowances[0]!.caps[0]!.spentThisPeriod).toBe(0n);
+    expect(v!.allowances[0]!.periodEndsAt).toBe(Number(t0 + 3n * day));
+  });
+  it("past expiry reads expired", async () => {
+    const v = await readVault(fakeGet([cfgUtxo, utxo("a1".repeat(32), { lovelace: "60000000", [unitA]: "1" }, allowanceToData(allowance(0n, t0)))]), policy, "Preprod", Number(t0 + 31n * day));
+    expect(v!.allowances[0]!.status).toBe("expired");
+  });
+  it("a malformed allowance is reported, not fatal", async () => {
+    const v = await readVault(fakeGet([cfgUtxo, utxo("a1".repeat(32), { lovelace: "5000000", [unitA]: "1" }, "d87980")]), policy, "Preprod", Number(t0));
+    expect(v!.allowances[0]!.status).toBe("malformed");
+  });
+  it("a vault with no allowances has an empty list", async () => {
+    const v = await readVault(fakeGet([cfgUtxo]), policy, "Preprod", Number(t0));
+    expect(v!.allowances).toEqual([]);
+  });
+  it("nothing at the address is no vault", async () => {
+    expect(await readVault(async () => undefined, policy, "Preprod", Number(t0))).toBeUndefined();
+  });
+
+  it("walks an allowance's history back to its grant, with each intent's purpose", async () => {
+    const payee = addressToBech32({ payment: { type: "Key", hash: h(4) }, stake: null }, "Preprod");
+    const intent = { v: 1, id: "INV-1", kind: "agent_spend", purpose: "hosting" };
+    const j = JSON.stringify(intent).match(/.{1,64}/g)!;
+    const get: Get = async (path) => {
+      if (path === "/txs/" + "b2".repeat(32) + "/utxos")
+        return { inputs: [{ tx_hash: "b1".repeat(32), output_index: 0, amount: [{ unit: unitA, quantity: "1" }] }], outputs: [{ address: payee, amount: [{ unit: "lovelace", quantity: "4000000" }] }, { address: addr, amount: [{ unit: unitA, quantity: "1" }] }] };
+      if (path === "/txs/" + "b2".repeat(32) + "/metadata") return [{ label: "7041", json_metadata: { h: "00", j } }];
+      if (path === "/txs/" + "b2".repeat(32)) return { block_time: 1_790_000_100 };
+      if (path === "/txs/" + "b1".repeat(32) + "/utxos") return { inputs: [{ tx_hash: "ff".repeat(32), output_index: 0, amount: [{ unit: "lovelace", quantity: "9" }] }], outputs: [] };
+      return undefined;
+    };
+    const hist = await allowanceHistory(get, unitA, addr, "b2".repeat(32));
+    expect(hist).toEqual([{ txHash: "b2".repeat(32), time: 1_790_000_100_000, kind: "agent", purpose: "hosting", intentId: "INV-1", payees: [{ address: payee, lovelace: 4_000_000n }] }]);
+  });
+});
