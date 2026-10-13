@@ -26,7 +26,8 @@ export class WalletError extends Error {
 const injected = (): Record<string, Injected> => (globalThis as unknown as { cardano?: Record<string, Injected> }).cardano ?? {};
 const KNOWN = [{ id: "lace", name: "Lace" }, { id: "eternl", name: "Eternl" }, { id: "vespr", name: "Vespr" }];
 
-export function wallets() {
+export type WalletChoice = { id: string; name: string; icon?: string; installed: boolean };
+export function wallets(): WalletChoice[] {
   const inj = injected();
   const found = Object.entries(inj)
     .filter(([, w]) => w && typeof w.enable === "function" && typeof w.name === "string")
