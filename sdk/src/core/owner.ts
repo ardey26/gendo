@@ -68,7 +68,7 @@ async function finish(lucid: LucidEvolution, b: ReturnType<LucidEvolution["newTx
 export async function createVault(
   lucid: LucidEvolution,
   init: ConfigDatum,
-  opts: { refScriptAddress?: string } = {},
+  opts: { refScriptAddress?: string; fund?: bigint; signer?: string } = {},
 ): Promise<{ tx: TxSignBuilder; vault: Vault }> {
   const problems = isValidConfig(init);
   if (problems.length) throw new Error(`invalid config: ${problems.join("; ")}`);
@@ -85,6 +85,10 @@ export async function createVault(
   // Edge I3: park the reference script at an always-fail address so nobody can remove it.
   if (opts.refScriptAddress)
     b = b.pay.ToAddressWithData(opts.refScriptAddress, undefined, { lovelace: 0n }, vault.script);
+  // The treasury: plain ADA at the vault address, like fundTreasury.
+  if (opts.fund) b = b.pay.ToAddress(vault.address, { lovelace: opts.fund });
+  // The app's server accepts a creation only from the signed-in owner's own key.
+  if (opts.signer) b = b.addSignerKey(opts.signer);
   return { tx: await finish(lucid, b), vault };
 }
 
