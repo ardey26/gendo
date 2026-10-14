@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentProblems, createConfig, createProblems, ownerKeyOf, toLovelace, type AgentForm, type CreateForm } from "../src/owner/validate.ts";
+import { agentProblems, buildError, createConfig, createProblems, ownerKeyOf, toLovelace, type AgentForm, type CreateForm } from "../src/owner/validate.ts";
 import { credentialToAddress } from "../../sdk/src/core/index.ts";
 
 const ok: AgentForm = { name: "payout-bot", agentKey: "9".repeat(56), perPayment: "10", budget: "25", period: "day", payees: ["addr_test1qok"], expires: "2099-01-01", fund: "40" };
@@ -57,4 +57,12 @@ describe("create a vault", () => {
     expect(createProblems(f({ owners: [], threshold: "1" }), { me, net: "Preprod" })).toEqual([]);
     expect(createConfig(f({ owners: [], threshold: "1", windowMin: "2" }), me, "Custom").maxTxValidityMs).toBe(120_000n);
   });
+});
+
+describe("build errors in plain words", () => {
+  it("a wallet short of ADA says by how much", () =>
+    expect(buildError('{ Complete: Your wallet does not have enough funds to cover the required assets: { "lovelace": "16123160n" } Or it contains UTxOs with reference scripts; which are excluded from coin selection. }'))
+      .toBe("Your wallet is about 16.12316 ADA short. Creating a vault takes about 30 ADA plus what you put in the treasury; preprod's faucet gives test ADA."));
+  it("a wallet with no plain-ADA output", () => expect(buildError("wallet needs a pure-ADA UTxO to use as a seed")).toMatch(/plain ADA/));
+  it("anything else passes through", () => expect(buildError("something else")).toBe("something else"));
 });

@@ -8,7 +8,7 @@ import { owner, refHolderAddress } from "../../../../sdk/src/core/index.ts";
 import { api } from "../api.ts";
 import { explainFor, useReview } from "../review.tsx";
 import { Copy, ErrorNote, Shell, short, useOwner, usePoll } from "../ui.tsx";
-import { createConfig, createProblems, ownerKeyOf, toLovelace, type CreateForm } from "../validate.ts";
+import { buildError, createConfig, createProblems, ownerKeyOf, toLovelace, type CreateForm } from "../validate.ts";
 import { partialSign } from "../wallet.ts";
 
 type Made = { id: string; vaultId: string; policy: string; status: string; error?: string };
@@ -50,7 +50,7 @@ export function Create() {
       const r = await api.createVault({ cbor: p.cbor, witness, name: f.name.trim() });
       setMade({ id: r.pending.id, vaultId: r.vaultId, policy: r.policy, status: r.pending.status, ...(r.pending.error ? { error: r.pending.error } : {}) });
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(buildError((e as Error).message ?? String(e)));
     } finally {
       setBusy(undefined);
     }

@@ -2,6 +2,7 @@
 import { MAX_DESTINATIONS, MAX_OWNERS } from "../../../sdk/src/core/limits.ts";
 import { toPlutusAddress } from "../../../sdk/src/core/address.ts";
 import type { AllowanceDatum, ConfigDatum, PlutusAddress } from "../../../sdk/src/core/data.ts";
+import { ada } from "../public/format.ts";
 
 export type AgentForm = { name: string; agentKey: string; perPayment: string; budget: string; period: "day" | "week" | "month"; payees: string[]; expires: string; fund: string };
 export const PERIOD_MS = { day: 86_400_000n, week: 604_800_000n, month: 2_592_000_000n } as const;
@@ -95,4 +96,12 @@ export function createConfig(f: CreateForm, me: string, net: "Preprod" | "Custom
     paused: false,
     maxTxValidityMs: BigInt(Number(f.windowMin) * 60_000),
   };
+}
+
+/** A failed build, said plainly: the wallet libraries' messages aren't meant for people. */
+export function buildError(message: string): string {
+  const short = /not have enough funds[\s\S]*?"lovelace":\s*"(\d+)n?"/.exec(message);
+  if (short) return `Your wallet is about ${ada(BigInt(short[1]!))} ADA short. Creating a vault takes about 30 ADA plus what you put in the treasury; preprod's faucet gives test ADA.`;
+  if (/pure-ADA UTxO/.test(message)) return "Your wallet needs some plain ADA (an output holding no tokens) to create a vault.";
+  return message;
 }
