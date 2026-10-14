@@ -135,6 +135,14 @@ export function Create() {
         <div className="note">
           {n === 1 ? "Only you own it: you approve every change alone." : `Any ${f.threshold} of the ${n} owners approve changes; any one owner can pause every agent at once.`}{" "}
           Creating it costs the network fee plus about 1.3 ADA that stays with the vault's settings{f.refScript ? ", and about 28 ADA locked for good for the cheaper agent payments" : ""}.
+          <details style={{ marginTop: 8 }}>
+            <summary className="faint" style={{ cursor: "pointer", fontSize: 12 }}>Why does this lock ADA?</summary>
+            <div className="faint" style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
+              <span>Cardano asks for a deposit for anything stored on chain: every entry must hold a minimum amount of ADA, more for bigger data. It keeps people from filling the chain with junk for free.</span>
+              <span>The vault's settings (its owners and threshold) are one small entry, so about 1.3 ADA stays with them for as long as the vault exists.</span>
+              <span>The optional copy of the vault's code is 6 KB, so its deposit is about 28 ADA. It's parked where nobody can ever spend it, so agents can always rely on it; that ADA is gone for good. Each agent payment then costs about 0.18 ADA less.</span>
+            </div>
+          </details>
         </div>
         {f.name.trim() && problems.length > 0 && <ErrorNote error={problems.join(" ")} />}
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
