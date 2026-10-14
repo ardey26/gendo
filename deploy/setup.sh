@@ -9,6 +9,11 @@ test -s /etc/gendo/env || { echo "missing /etc/gendo/env"; exit 1; }
 chmod 600 /etc/gendo/env
 
 export DEBIAN_FRONTEND=noninteractive
+# Small servers (1 GB) need swap for the app's build.
+if ! swapon --show | grep -q /swapfile; then
+  fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap -q /swapfile && swapon /swapfile
+  grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
 apt-get update -q
 apt-get install -yq git curl xz-utils ufw unattended-upgrades gnupg debian-keyring debian-archive-keyring apt-transport-https
 
