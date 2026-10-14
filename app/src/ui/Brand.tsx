@@ -1,3 +1,4 @@
+import { openNotice } from "./notice.ts";
 import { explorerUrl } from "./explorer.ts";
 
 // The 限度 seal mark and the network band, as in the draft.
@@ -13,6 +14,7 @@ export function Netband() {
     <div className="netband" role="status">
       <b>Preprod test network</b>
       <span>Test ADA only. Nothing here has real value.</span>
+      <button type="button" className="netlink" onClick={openNotice}>Early preview</button>
     </div>
   );
 }

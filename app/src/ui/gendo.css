@@ -28,6 +28,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}
 a{color:#efe7d8}a:hover{color:#e0452b}
 .netband{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;padding:5px 20px;font-size:12px;line-height:1.3;color:#b9afa0;background:repeating-linear-gradient(-45deg,#15120f 0 10px,#1a1612 10px 20px);border-bottom:1px solid #2a241e}
 .netband b{color:#efe7d8;font-weight:700}
+.netlink{font:inherit;color:#efe7d8;background:none;border:0;padding:0;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
 .panel:has(.tip){overflow:visible}
 .tip{position:relative;display:inline-flex;width:16px;height:16px;border-radius:999px;border:1px solid #3a332b;background:transparent;color:#8f8578;font-family:inherit;font-variant-numeric:tabular-nums;font-size:10px;font-weight:400;align-items:center;justify-content:center;cursor:help;padding:0;align-self:center;flex-shrink:0;text-transform:none;letter-spacing:0}
 .tip:hover,.tip:focus-visible{color:#efe7d8;border-color:#8f8578}

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { parseRoute } from "./route.ts";
 import "./ui/gendo.css";
 import { Spinner } from "./ui/Brand.tsx";
+import { Notice } from "./ui/Notice.tsx";
 
 // A tab older than the files kept after a deploy: reload once onto the current build.
 addEventListener("vite:preloadError", () => {
@@ -35,6 +36,7 @@ function App() {
   return (
     <Suspense fallback={<div className="app"><div className="boot"><Spinner label="Loading…" /></div></div>}>
       {route.page === "public" ? <PublicPage policy={route.policy} network={network} /> : <OwnerApp route={route} network={network} />}
+      <Notice />
     </Suspense>
   );
 }
