@@ -393,7 +393,7 @@ Test counts at the time of writing:
 | Mutations killed (each by at least one unit test, so no kill depends on a property test's luck) | 85 |
 | SDK unit + emulator tests | 155 |
 | Keyless server (chain proxy, listings, sign-in, inbox, agent requests, vault creation and suggestions, limits) | 57 |
-| App (formatting, routes, what a pending tx does, inbox status and polling, agent form and edit rules, recipes and rebuild matching, vault list, the create form, API and wallet errors) | 52 |
+| App (formatting, routes, what a pending tx does, inbox status and polling, agent form and edit rules, recipes and rebuild matching, vault list, the create form, API and wallet errors) | 54 |
 | Owner app end to end (devnet, two owners in two headless browsers, including creating a vault in the app) | 12 checks |
 | Public page end to end (devnet, headless Chrome) | 8 checks |
 | Approvals through the server (devnet: sign-in, single-owner pause, 2-of-2 unpause, an agent request via MCP, server down and retry) | 8 checks |
