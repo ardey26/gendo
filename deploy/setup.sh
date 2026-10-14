@@ -9,6 +9,9 @@ test -s /etc/gendo/env || { echo "missing /etc/gendo/env"; exit 1; }
 chmod 600 /etc/gendo/env
 
 export DEBIAN_FRONTEND=noninteractive
+# A fresh server runs its own first-boot updates: wait for them to let go of apt.
+cloud-init status --wait >/dev/null 2>&1 || true
+while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock >/dev/null 2>&1; do sleep 5; done
 # Small servers (1 GB) need swap for the app's build.
 if ! swapon --show | grep -q /swapfile; then
   fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap -q /swapfile && swapon /swapfile
