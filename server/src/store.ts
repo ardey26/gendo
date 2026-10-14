@@ -31,9 +31,11 @@ export function openStore(path: string) {
   );
   const getPending = db.prepare("select * from pending where id = ?");
   const byPolicy = db.prepare("select * from pending where policy = ? order by created_at desc limit 200");
+  // Rows in vaults this key added, plus the creations it made itself (registered only once they land).
   const mine = db.prepare(
-    "select p.* from pending p join user_vaults u on u.policy = p.policy and u.pkh = ? where p.required like ? order by p.created_at desc limit 200",
+    "select p.* from pending p where p.required like ? and (exists (select 1 from user_vaults u where u.policy = p.policy and u.pkh = ?) or (p.kind = 'create' and p.created_by = ?)) order by p.created_at desc limit 200",
   );
+  const known = db.prepare("select policy, min(vault_id) as vault_id from user_vaults group by policy order by policy limit 500");
   const openCount = db.prepare("select count(*) as n from pending where policy = ? and status = 'open'");
   const openBy = db.prepare("select count(*) as n from pending where created_by = ? and status = 'open'");
   const setStatus = db.prepare(
@@ -75,8 +77,10 @@ export function openStore(path: string) {
     },
     getPending: (id: string) => getPending.get(id) as PendingRow | undefined,
     pendingFor: (policy: string) => byPolicy.all(policy) as PendingRow[],
-    /** Rows in the vaults this key added, where it is a required signer. */
-    pendingForSigner: (pkh: string) => mine.all(pkh, `%"${pkh}"%`) as PendingRow[],
+    /** Rows in the vaults this key added, where it is a required signer, plus its own creations. */
+    pendingForSigner: (pkh: string) => mine.all(`%"${pkh}"%`, pkh, pkh) as PendingRow[],
+    /** Every vault someone added here (bounded), with one id for it. */
+    knownVaults: () => (known.all() as { policy: string; vault_id: string }[]).map((r) => ({ policy: r.policy, vaultId: r.vault_id })),
     openCount: (policy: string) => (openCount.get(policy) as { n: number }).n,
     openBy: (pkh: string) => (openBy.get(pkh) as { n: number }).n,
     /** Compare-and-set: only one caller moves a row out of `from`. A move back to open counts an attempt. */

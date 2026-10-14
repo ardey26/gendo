@@ -4,14 +4,14 @@
 // never decides what a tx does: each owner's browser recomputes that from the chain.
 import { randomBytes } from "node:crypto";
 import type { Context, Hono } from "hono";
-import { CML, makeVault, parseVaultId } from "../../sdk/src/core/index.js";
+import { CML, creationOf, formatVaultId, makeVault, parseVaultId } from "../../sdk/src/core/index.js";
 import { describeTx } from "../../sdk/src/core/cosign.js";
 import { bodyHash, requiredSignersOf, verifiedSigners, withWitnesses } from "../../sdk/src/core/witnesses.js";
 import { sha256, type mountAuth } from "./auth.js";
 import type { PendingRow, openStore } from "./store.js";
 
 export type PendingView = {
-  id: string; policy: string; kind: "proposal" | "request"; title: string; cbor: string; recipe: unknown;
+  id: string; policy: string; kind: "proposal" | "request" | "create"; title: string; cbor: string; recipe: unknown;
   requiredSigners: string[]; signedBy: string[]; status: "open" | "submitting" | "submitted" | "landed" | "failed";
   txHash?: string; error?: string; createdBy: string; createdAt: number;
 };
@@ -105,6 +105,12 @@ export function mountPending(app: Hono, d: Deps, auth: Auth) {
   const trySubmit = async (r: PendingRow) => {
     if (allSigned(r) && r.attempts < MAX_ATTEMPTS && d.store.setStatus(r.id, "open", "submitting", d.now(), { error: r.error })) await submit(r);
   };
+  /** A creation that landed: the creator's list and the vault's name (kept if an owner renamed it since). */
+  const register = (r: PendingRow) => {
+    const { vaultId, name } = JSON.parse(r.recipe!) as { vaultId: string; name: string };
+    d.store.addUserVault(r.created_by, r.policy, vaultId);
+    if (!d.store.get(r.policy)) d.store.put({ policy: r.policy, name, listed: false });
+  };
   /** Bring a row up to date: landed, a stuck submit, a retry after a transient error. */
   const refresh = async (r: PendingRow) => {
     if (r.status === "submitted" && r.tx_hash && (await onChain(r.tx_hash))) d.store.setStatus(r.id, "submitted", "landed", d.now());
@@ -114,7 +120,9 @@ export function mountPending(app: Hono, d: Deps, auth: Auth) {
     }
     const now = d.store.getPending(r.id)!;
     if (now.status === "open") await trySubmit(now);
-    return view(d.store.getPending(r.id)!);
+    const latest = d.store.getPending(r.id)!;
+    if (latest.kind === "create" && latest.status === "landed") register(latest);
+    return view(latest);
   };
   /** Store each valid signature by a required signer; submit once everyone has signed. */
   const addWitness = async (r: PendingRow, witness: string) => {
@@ -191,6 +199,32 @@ export function mountPending(app: Hono, d: Deps, auth: Auth) {
     return c.json(await addWitness(r, witness));
   });
 
+  // --- creating a vault -------------------------------------------------------
+
+  app.post("/vaults", async (c) => {
+    const who = auth.sessionPkh(c);
+    if (!who) return c.json({ error: "sign in first" }, 401);
+    const { cbor, witness, name } = await c.req.json<{ cbor?: unknown; witness?: unknown; name?: unknown }>();
+    if (!isHex(cbor, 64_000) || !isHex(witness, 4_000) || typeof name !== "string" || !name.trim() || name.length > 80)
+      return c.json({ error: "cbor, witness and a name (1 to 80 characters) are required" }, 400);
+    let made: ReturnType<typeof creationOf>;
+    try {
+      made = creationOf(cbor, (d.network ?? "Preprod") as "Preprod" | "Custom");
+      if (!made.config.owners.includes(who)) return c.json({ error: "you must be one of its owners" }, 400);
+      const req = requiredSignersOf(cbor);
+      if (req.length !== 1 || req[0] !== who) return c.json({ error: "the creation must name you, and only you, as its signer" }, 400);
+      if (!verifiedSigners(cbor, witness).includes(who)) return c.json({ error: "the witness isn't your signature over this tx" }, 400);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+    const policy = made.vault.hash;
+    const busy = full(c, policy, who);
+    if (busy) return busy;
+    const vaultId = formatVaultId(made.id);
+    const row = insert({ policy, kind: "create", title: `Create ${name.trim()}`, cbor, recipe: { vaultId, name: name.trim() }, required: [who], createdBy: who });
+    return c.json({ pending: await addWitness(row, witness), vaultId, policy });
+  });
+
   // --- your vaults ------------------------------------------------------------
 
   app.post("/me/vaults", async (c) => {
@@ -222,6 +256,20 @@ export function mountPending(app: Hono, d: Deps, auth: Auth) {
         return { policy: v.policy, vaultId: v.vaultId, name: l?.name ?? null, listed: l?.listed ?? false };
       }),
     );
+  });
+
+  /** Vaults someone added here whose owners on chain include you, that you haven't added. Adding stays your choice. */
+  app.get("/me/suggested-vaults", async (c) => {
+    const who = auth.sessionPkh(c);
+    if (!who) return c.json({ error: "sign in first" }, 401);
+    const added = new Set(d.store.userVaults(who).map((v) => v.policy));
+    const out: { policy: string; vaultId: string; name: string | null }[] = [];
+    for (const v of d.store.knownVaults()) {
+      if (out.length >= 20) break;
+      if (added.has(v.policy)) continue;
+      if ((await d.owners(v.policy))?.includes(who)) out.push({ ...v, name: d.store.get(v.policy)?.name ?? null });
+    }
+    return c.json(out);
   });
 
   app.put("/vaults/:policy/listing", async (c) => {
