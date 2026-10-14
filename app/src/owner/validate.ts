@@ -1,6 +1,7 @@
 // The agent editor's rules: the chain's own (is_well_formed) plus what makes a form usable.
-import { MAX_DESTINATIONS } from "../../../sdk/src/core/limits.ts";
-import type { AllowanceDatum, PlutusAddress } from "../../../sdk/src/core/data.ts";
+import { MAX_DESTINATIONS, MAX_OWNERS } from "../../../sdk/src/core/limits.ts";
+import { toPlutusAddress } from "../../../sdk/src/core/address.ts";
+import type { AllowanceDatum, ConfigDatum, PlutusAddress } from "../../../sdk/src/core/data.ts";
 
 export type AgentForm = { name: string; agentKey: string; perPayment: string; budget: string; period: "day" | "week" | "month"; payees: string[]; expires: string; fund: string };
 export const PERIOD_MS = { day: 86_400_000n, week: 604_800_000n, month: 2_592_000_000n } as const;
@@ -47,4 +48,51 @@ export function editedDatum(
   const caps = i >= 0 ? al.caps.map((c, j) => (j === i ? lov : c)) : [...al.caps, lov];
   const spent = i >= 0 ? al.spent : [...al.spent, 0n];
   return { ...al, caps, spent, destinations: f.payees.map(toAddress), periodMs: f.period ?? al.periodMs, expiresAt: f.expiresAt };
+}
+
+// --- creating a vault --------------------------------------------------------
+
+/** `owners` are the other owners, as typed; the creator is always the first owner. */
+export type CreateForm = { name: string; owners: string[]; threshold: string; windowMin: "2" | "10" | "60"; fund: string };
+
+/** A wallet's payment key hash from a key hash or a testnet wallet address; undefined for anything else. */
+export function ownerKeyOf(s: string, net: "Preprod" | "Custom"): string | undefined {
+  const t = s.trim();
+  if (/^[0-9a-f]{56}$/.test(t)) return t;
+  if (!t.startsWith("addr_test1")) return undefined;
+  try {
+    const p = toPlutusAddress(t, net).payment;
+    return p.type === "Key" ? p.hash : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function createProblems(f: CreateForm, o: { me: string; net: "Preprod" | "Custom" }): string[] {
+  const p: string[] = [];
+  if (!f.name.trim()) p.push("Name the vault.");
+  if (f.name.length > 80) p.push("Keep the name under 80 characters.");
+  const keys = f.owners.map((s) => ownerKeyOf(s, o.net));
+  f.owners.forEach((s, i) => {
+    if (!keys[i]) p.push(`${s.slice(0, 20)}… isn't a wallet address or key hash on this network.`);
+  });
+  const all = [o.me, ...keys.filter((k): k is string => !!k)];
+  if (new Set(all).size !== all.length) p.push("You're already an owner; list each other owner once.");
+  const n = 1 + f.owners.length;
+  if (n > MAX_OWNERS) p.push(`At most ${MAX_OWNERS} owners.`);
+  const t = Number(f.threshold);
+  if (!Number.isInteger(t) || t < 1 || t > n) p.push(`The threshold must be between 1 and ${n}.`);
+  const fund = toLovelace(f.fund);
+  if (fund === undefined || (fund > 0n && fund < 2_000_000n)) p.push("Fund the treasury with at least 2 ADA, or 0 for none.");
+  return p;
+}
+
+/** The config to create; call only when createProblems finds nothing. */
+export function createConfig(f: CreateForm, me: string, net: "Preprod" | "Custom"): ConfigDatum {
+  return {
+    owners: [me, ...f.owners.map((s) => ownerKeyOf(s, net)!)],
+    threshold: BigInt(f.threshold),
+    paused: false,
+    maxTxValidityMs: BigInt(Number(f.windowMin) * 60_000),
+  };
 }

@@ -1,7 +1,7 @@
 // The one review step every signature goes through. A proposal is built, explained from the tx
 // and (on preprod) hash-checked chain data, and shown here; only then does the wallet open.
 import { useState } from "react";
-import { CML, explainTx, fromPlutusAddress, type AllowanceDatum, type Vault } from "../../../sdk/src/core/index.ts";
+import { CML, explainTx, fromPlutusAddress, refHolderAddress, type AllowanceDatum, type Vault } from "../../../sdk/src/core/index.ts";
 import { inputsOf } from "./chain.ts";
 import { detailOf, type Ctx, type Detail } from "./diff.ts";
 import { buildRecipe, type Recipe } from "./recipes.ts";
@@ -19,7 +19,7 @@ export function ctxFor(o: Owner, vault: Vault, labels: Record<string, string>, r
     }
   };
   return {
-    viewer: o.me.pkh, vaultAddress: vault.address, labels, isMine, short, recipe: recipe ?? null,
+    viewer: o.me.pkh, vaultAddress: vault.address, refHolder: refHolderAddress(o.net), labels, isMine, short, recipe: recipe ?? null,
     payeesOf: (d: AllowanceDatum) => d.destinations.map((a) => fromPlutusAddress(o.net, a)),
   };
 }

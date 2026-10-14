@@ -9,6 +9,8 @@ export type Ctx = {
   viewer: string;
   /** The vault's own address: the only address whose funds are the vault's. */
   vaultAddress: string;
+  /** Where a new vault parks its reference script (always-fail: locked for good). */
+  refHolder?: string;
   labels: Record<string, string>;
   payeesOf: (d: AllowanceDatum) => string[];
   isMine: (address: string) => boolean;
@@ -75,7 +77,10 @@ export function detailOf(e: Explanation, ctx: Ctx): Detail {
   if (Object.keys(e.leavesVault).length) money.push({ label: "Leaves the vault", value: qty(e.leavesVault) });
   const isVault = (a: string) => a === ctx.vaultAddress;
   for (const f of e.flows)
-    if (!ctx.isMine(f.address) && !isVault(f.address) && (f.delta.lovelace ?? 0n) > 0n) money.push({ label: `To ${f.address}`, value: qty(f.delta) });
+    if (!ctx.isMine(f.address) && !isVault(f.address) && (f.delta.lovelace ?? 0n) > 0n)
+      money.push({ label: f.address === ctx.refHolder ? "Reference script (locked for good; it lowers every agent payment's fee)" : `To ${f.address}`, value: qty(f.delta) });
+  const intoVault = e.flows.find((f) => isVault(f.address))?.delta.lovelace ?? 0n;
+  if (intoVault > 0n) money.push({ label: "Into the vault", value: `${ada(intoVault)} ADA` });
   const mine = e.flows.filter((f) => ctx.isMine(f.address)).reduce((n, f) => n - (f.delta.lovelace ?? 0n), 0n);
   if (mine > 0n) money.push({ label: "From your wallet", value: `${ada(mine)} ADA` });
   const out = (d: Omit<Detail, "money" | "warnings">): Detail => ({ ...d, money, warnings: e.warnings });
@@ -102,6 +107,10 @@ export function detailOf(e: Explanation, ctx: Ctx): Detail {
     });
   }
   const cfg = e.changes.find((c) => c.kind === "config");
+  if (cfg && cfg.kind === "config" && !cfg.before && cfg.after) {
+    const c = cfg.after;
+    return out({ kind: "Change", title: "Create this vault", summary: `Creates a vault with ${c.owners.length} owner${c.owners.length === 1 ? "" : "s"}. Any ${c.threshold} of them approve changes; any one can pause.`, rows: configRows(null, c, ctx) });
+  }
   if (cfg && cfg.kind === "config") {
     const a = cfg.before, b = cfg.after;
     const title = a && b && a.paused !== b.paused && a.threshold === b.threshold && a.owners.join() === b.owners.join()
