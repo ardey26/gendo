@@ -69,6 +69,25 @@ export function ownerKeyOf(s: string, net: "Preprod" | "Custom"): string | undef
   }
 }
 
+/** Why the owner being typed can't be added yet; undefined while empty or addable. */
+export function ownerHint(s: string, listed: string[], me: string, net: "Preprod" | "Custom"): string | undefined {
+  const t = s.trim();
+  if (!t) return undefined;
+  const k = ownerKeyOf(t, net);
+  if (!k) {
+    if (/^addr1/.test(t)) return "That's a mainnet address. Use the owner's preprod (addr_test1…) address.";
+    try {
+      if (t.startsWith("addr_test1") && toPlutusAddress(t, net).payment.type === "Script") return "That's a script address. An owner is a person's wallet address or key hash.";
+    } catch {
+      // not an address at all
+    }
+    return "That isn't a wallet address (addr_test1…) or a 56-character key hash.";
+  }
+  if (k === me) return "That's you; you're already an owner.";
+  if (listed.some((x) => ownerKeyOf(x, net) === k)) return "That owner is already listed.";
+  return undefined;
+}
+
 export function createProblems(f: CreateForm, o: { me: string; net: "Preprod" | "Custom" }): string[] {
   const p: string[] = [];
   if (!f.name.trim()) p.push("Name the vault.");

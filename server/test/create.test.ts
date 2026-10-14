@@ -6,7 +6,7 @@ import { CML, Emulator, Lucid, generateEmulatorAccountFromPrivateKey } from "../
 import { witness } from "../../sdk/src/core/cosign.js";
 import { owner, refHolderAddress } from "../../sdk/src/core/index.js";
 import { createApp } from "../src/app.js";
-import { json, signIn, store } from "./helpers.js";
+import { json, policy as knownPolicy, signIn, store, vaultId as knownVaultId } from "./helpers.js";
 
 type Submit = { ok: true; hash: string } | { ok: false; error: string; transient?: boolean };
 
@@ -31,11 +31,11 @@ async function setup(o: { submit?: (cbor: string) => Promise<Submit>; landed?: (
   const session = async (k: typeof A) => ((await (await signIn(app, k!)).json()) as { token: string }).token;
   const call = async (method: string, path: string, token: string, body?: unknown) =>
     app.request(path, { method, headers: json({ authorization: `Bearer ${token}` }), ...(body ? { body: JSON.stringify(body) } : {}) });
-  const create = async (ownersOf: string[], signer = A!.pkh) => {
+  const create = async (ownersOf: string[], signer = A!.pkh, by = A!) => {
     const { tx, vault } = await owner.createVault(lucid, { owners: ownersOf, threshold: 1n, paused: false, maxTxValidityMs: 120_000n },
       { refScriptAddress: refHolderAddress("Custom"), fund: 5_000_000n, signer });
     const cbor = tx.toCBOR();
-    return { cbor, vault, wit: await witness(lucid, cbor, A!.sk) };
+    return { cbor, vault, wit: await witness(lucid, cbor, by.sk) };
   };
   return { A: A!, B: B!, C: C!, app, db, owners, session, call, create };
 }
@@ -68,6 +68,16 @@ describe("POST /vaults", () => {
     await s.call("GET", "/me/pending", again);
     expect(((await (await s.call("GET", "/me/vaults", again)).json()) as unknown[]).length).toBe(1);
   });
+  it("a creator who comes back sees the vault without opening the inbox", async () => {
+    let landed = false;
+    const s = await setup({ landed: () => landed });
+    const a = await s.session(s.A);
+    const c = await s.create([s.A.pkh]);
+    await s.call("POST", "/vaults", a, { cbor: c.cbor, witness: c.wit, name: "Solo" });
+    landed = true;
+    const again = await s.session(s.A);
+    expect(((await (await s.call("GET", "/me/vaults", again)).json()) as unknown[]).length).toBe(1);
+  });
   it("a failed creation registers nothing", async () => {
     const s = await setup({ submit: async () => ({ ok: false, error: "BadInputsUTxO" }) });
     const a = await s.session(s.A);
@@ -80,7 +90,7 @@ describe("POST /vaults", () => {
   it("refuses a creation that doesn't name the signed-in owner", async () => {
     const s = await setup();
     const b = await s.session(s.B);
-    const c = await s.create([s.A.pkh]);
+    const c = await s.create([s.A.pkh], s.B.pkh, s.B); // B signs a creation that names only A as owner
     const r = await s.call("POST", "/vaults", b, { cbor: c.cbor, witness: c.wit, name: "X" });
     expect(r.status).toBe(400);
     expect(((await r.json()) as { error: string }).error).toMatch(/one of its owners/);
@@ -118,6 +128,24 @@ describe("GET /me/suggested-vaults", () => {
     expect(await (await s.call("GET", "/me/suggested-vaults", a)).json()).toEqual([]); // already added
     await s.call("POST", "/me/vaults", b, { vaultId });
     expect(await (await s.call("GET", "/me/suggested-vaults", b)).json()).toEqual([]);
+  });
+  it("a co-owner sees an app-created vault as soon as it's on chain, before the creator comes back", async () => {
+    const s = await setup();
+    const a = await s.session(s.A);
+    const b = await s.session(s.B);
+    const c = await s.create([s.A.pkh, s.B.pkh]);
+    const { vaultId } = (await (await s.call("POST", "/vaults", a, { cbor: c.cbor, witness: c.wit, name: "Team" })).json()) as { vaultId: string };
+    expect(await (await s.call("GET", "/me/suggested-vaults", b)).json()).toEqual([]); // not on chain yet
+    s.owners.set(c.vault.hash, [s.A.pkh, s.B.pkh]);
+    expect(await (await s.call("GET", "/me/suggested-vaults", b)).json()).toEqual([{ policy: c.vault.hash, vaultId, name: "Team" }]);
+    s.owners.set(c.vault.hash, [s.A.pkh]); // the owners changed on chain: B isn't one anymore
+    expect(await (await s.call("GET", "/me/suggested-vaults", b)).json()).toEqual([]);
+  });
+  it("a vault added by id is suggested to its other owners", async () => {
+    const s = await setup();
+    s.owners.set(knownPolicy, [s.A.pkh, s.B.pkh]);
+    await s.call("POST", "/me/vaults", await s.session(s.A), { vaultId: knownVaultId });
+    expect(await (await s.call("GET", "/me/suggested-vaults", await s.session(s.B))).json()).toEqual([{ policy: knownPolicy, vaultId: knownVaultId, name: null }]);
   });
   it("the creation stays out of the other owner's inbox (the opt-in inbox is pinned in pending.test.ts)", async () => {
     const s = await setup({ landed: () => true });

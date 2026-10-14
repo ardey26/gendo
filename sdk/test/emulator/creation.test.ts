@@ -1,7 +1,7 @@
 // sdk/test/emulator/creation.test.ts
 // creationOf must accept exactly a gendo vault creation, and say which vault it makes.
 import { beforeAll, describe, expect, it } from "vitest";
-import type { LucidEvolution } from "@lucid-evolution/lucid";
+import { CML, mintingPolicyToId, scriptFromNative, type LucidEvolution } from "@lucid-evolution/lucid";
 import { creationOf } from "../../src/core/creation.js";
 import { configToData, mintRedeemer } from "../../src/core/data.js";
 import * as owner from "../../src/core/owner.js";
@@ -51,7 +51,7 @@ describe("creationOf", () => {
       .mintAssets({ [vault.configUnit]: 1n }, mintRedeemer("InitConfig")).attach.MintingPolicy(vault.script)
       .pay.ToAddressWithData(w.b.address, { kind: "inline", value: configToData(init()) }, { lovelace: 2n * ADA, [vault.configUnit]: 1n })
       .complete({ evaluator: blindEvaluator, setCollateral: 4n * ADA });
-    expect(() => creationOf(tx.toCBOR(), "Custom")).toThrow(/sends tokens elsewhere/);
+    expect(() => creationOf(tx.toCBOR(), "Custom")).toThrow(/vault's token leaves the vault/);
   });
   it("refuses an invalid config (threshold above the owner count)", async () => {
     await expect(owner.createVault(lucid, { ...init(), threshold: 3n })).rejects.toThrow(/threshold out of range/);
@@ -59,5 +59,27 @@ describe("creationOf", () => {
   it("refuses a reference script parked anywhere but the always-fail holder (someone could spend it)", async () => {
     const { tx } = await owner.createVault(lucid, init(), { refScriptAddress: w.b.address });
     expect(() => creationOf(tx.toCBOR(), "Custom")).toThrow(/unexpected reference script/);
+  });
+  it("a wallet holding tokens can create: its own tokens come back to it as change", async () => {
+    const policy = scriptFromNative({ type: "sig", keyHash: w.a.pkh });
+    const unit = mintingPolicyToId(policy) + "746f6b";
+    // All of A's ADA ends up next to the token, except one small plain output for the seed.
+    const mint = await lucid.newTx().collectFrom(await lucid.wallet().getUtxos()).mintAssets({ [unit]: 5n }).attach.MintingPolicy(policy)
+      .pay.ToAddress(w.a.address, { lovelace: 3n * ADA }).complete();
+    await signAndSubmit(lucid, w.emulator, mint, [w.a]);
+    const { tx } = await owner.createVault(lucid, init(), { refScriptAddress: refHolderAddress("Custom"), signer: w.a.pkh });
+    expect(creationOf(tx.toCBOR(), "Custom").config).toEqual(init());
+  });
+  it("refuses a tx with more inputs than a creation needs, before any script work", async () => {
+    const { tx } = await owner.createVault(lucid, init());
+    const body = tx.toTransaction().body();
+    const ins = CML.TransactionInputList.new();
+    for (let i = 0; i < 400; i++) ins.add(CML.TransactionInput.new(CML.TransactionHash.from_hex(i.toString(16).padStart(64, "0")), 0n));
+    const big = CML.TransactionBody.new(ins, body.outputs(), body.fee());
+    big.set_mint(body.mint()!);
+    const cbor = CML.Transaction.new(big, CML.TransactionWitnessSet.new(), true).to_cbor_hex();
+    const t0 = performance.now();
+    expect(() => creationOf(cbor, "Custom")).toThrow(/too many inputs/);
+    expect(performance.now() - t0).toBeLessThan(500);
   });
 });

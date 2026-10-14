@@ -8,7 +8,7 @@ import { owner, refHolderAddress } from "../../../../sdk/src/core/index.ts";
 import { api } from "../api.ts";
 import { explainFor, useReview } from "../review.tsx";
 import { Copy, ErrorNote, Shell, short, useOwner, usePoll } from "../ui.tsx";
-import { buildError, createConfig, createProblems, ownerKeyOf, toLovelace, type CreateForm } from "../validate.ts";
+import { buildError, createConfig, createProblems, ownerHint, toLovelace, type CreateForm } from "../validate.ts";
 import { partialSign } from "../wallet.ts";
 
 type Made = { id: string; vaultId: string; policy: string; status: string; error?: string };
@@ -23,6 +23,7 @@ export function Create() {
   const [made, setMade] = useState<Made>();
   const problems = createProblems(f, { me: o.me.pkh, net: o.net });
   const n = 1 + f.owners.length;
+  const hint = ownerHint(next, f.owners, o.me.pkh, o.net);
 
   const addOwner = () => {
     // A second owner: default to 2 of n, the usual company card.
@@ -105,8 +106,9 @@ export function Create() {
             ))}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <input id="cowner" aria-label="Another owner" value={next} onChange={(e) => setNext(e.target.value)} placeholder="Another owner's wallet address (addr_test1…) or key hash" style={{ flex: "1 1 320px" }} />
-              <button type="button" className="btn" disabled={!ownerKeyOf(next, o.net)} onClick={addOwner}>Add owner</button>
+              <button type="button" className="btn" disabled={!next.trim() || !!hint} onClick={addOwner}>Add owner</button>
             </div>
+            {hint && <div className="faint" role="status" style={{ fontSize: 12 }}>{hint}</div>}
 
             <label className="cap" htmlFor="cthreshold" style={{ marginTop: 6 }}>Approvals needed for changes</label>
             <select id="cthreshold" value={f.threshold} onChange={(e) => setF({ ...f, threshold: e.target.value })}>

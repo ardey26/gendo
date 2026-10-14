@@ -209,11 +209,12 @@ export function mountPending(app: Hono, d: Deps, auth: Auth) {
       return c.json({ error: "cbor, witness and a name (1 to 80 characters) are required" }, 400);
     let made: ReturnType<typeof creationOf>;
     try {
-      made = creationOf(cbor, (d.network ?? "Preprod") as "Preprod" | "Custom");
-      if (!made.config.owners.includes(who)) return c.json({ error: "you must be one of its owners" }, 400);
+      // The cheap checks first: only a signed-in owner's own signed tx gets the costlier creation check.
       const req = requiredSignersOf(cbor);
       if (req.length !== 1 || req[0] !== who) return c.json({ error: "the creation must name you, and only you, as its signer" }, 400);
       if (!verifiedSigners(cbor, witness).includes(who)) return c.json({ error: "the witness isn't your signature over this tx" }, 400);
+      made = creationOf(cbor, (d.network ?? "Preprod") as "Preprod" | "Custom");
+      if (!made.config.owners.includes(who)) return c.json({ error: "you must be one of its owners" }, 400);
     } catch (e) {
       return c.json({ error: (e as Error).message }, 400);
     }
@@ -222,6 +223,7 @@ export function mountPending(app: Hono, d: Deps, auth: Auth) {
     if (busy) return busy;
     const vaultId = formatVaultId(made.id);
     const row = insert({ policy, kind: "create", title: `Create ${name.trim()}`, cbor, recipe: { vaultId, name: name.trim() }, required: [who], createdBy: who });
+    for (const k of made.config.owners) if (k !== who) d.store.suggest(k, policy, vaultId, name.trim());
     return c.json({ pending: await addWitness(row, witness), vaultId, policy });
   });
 
@@ -244,12 +246,15 @@ export function mountPending(app: Hono, d: Deps, auth: Auth) {
     if (!owners) return c.json({ error: "no vault with that id on chain" }, 404);
     if (!owners.includes(who)) return c.json({ error: "you aren't an owner of that vault" }, 403);
     d.store.addUserVault(who, policy, vaultId.trim());
+    for (const k of owners) if (k !== who) d.store.suggest(k, policy, vaultId.trim(), d.store.get(policy)?.name ?? null);
     return c.json({ policy, vaultId: vaultId.trim() });
   });
 
   app.get("/me/vaults", async (c) => {
     const who = auth.sessionPkh(c);
     if (!who) return c.json({ error: "sign in first" }, 401);
+    // A creator who left before their vault landed finds it here when they come back.
+    await Promise.all(d.store.unfinishedCreates(who).map(refresh));
     return c.json(
       d.store.userVaults(who).map((v) => {
         const l = d.store.get(v.policy);
@@ -258,16 +263,16 @@ export function mountPending(app: Hono, d: Deps, auth: Auth) {
     );
   });
 
-  /** Vaults someone added here whose owners on chain include you, that you haven't added. Adding stays your choice. */
+  /** Vaults whose owners on chain include you, created or added here by another owner, that you haven't added. Adding stays your choice. */
   app.get("/me/suggested-vaults", async (c) => {
     const who = auth.sessionPkh(c);
     if (!who) return c.json({ error: "sign in first" }, 401);
-    const added = new Set(d.store.userVaults(who).map((v) => v.policy));
+    // Only vaults noted for you (bounded), each re-checked against its owners on chain.
     const out: { policy: string; vaultId: string; name: string | null }[] = [];
-    for (const v of d.store.knownVaults()) {
+    for (const v of d.store.suggestionsFor(who)) {
+      const owners = await d.owners(v.policy).catch(() => undefined);
+      if (owners?.includes(who)) out.push({ policy: v.policy, vaultId: v.vaultId, name: d.store.get(v.policy)?.name ?? v.name });
       if (out.length >= 20) break;
-      if (added.has(v.policy)) continue;
-      if ((await d.owners(v.policy))?.includes(who)) out.push({ ...v, name: d.store.get(v.policy)?.name ?? null });
     }
     return c.json(out);
   });

@@ -35,7 +35,11 @@ export function openStore(path: string) {
   const mine = db.prepare(
     "select p.* from pending p where p.required like ? and (exists (select 1 from user_vaults u where u.policy = p.policy and u.pkh = ?) or (p.kind = 'create' and p.created_by = ?)) order by p.created_at desc limit 200",
   );
-  const known = db.prepare("select policy, min(vault_id) as vault_id from user_vaults group by policy order by policy limit 500");
+  const unfinishedCreates = db.prepare("select * from pending where kind = 'create' and created_by = ? and status in ('open', 'submitting', 'submitted') order by created_at desc limit 20");
+  // Vaults that name a key as an owner, noted when a vault is created or added here; the chain has the final word.
+  db.exec("create table if not exists suggestions (pkh text not null, policy text not null, vault_id text not null, name text, primary key (pkh, policy))");
+  const suggest = db.prepare("insert into suggestions (pkh, policy, vault_id, name) values (?, ?, ?, ?) on conflict(pkh, policy) do nothing");
+  const suggestionsFor = db.prepare("select policy, vault_id, name from suggestions where pkh = ? and policy not in (select policy from user_vaults where pkh = ?) limit 50");
   const openCount = db.prepare("select count(*) as n from pending where policy = ? and status = 'open'");
   const openBy = db.prepare("select count(*) as n from pending where created_by = ? and status = 'open'");
   const setStatus = db.prepare(
@@ -79,8 +83,12 @@ export function openStore(path: string) {
     pendingFor: (policy: string) => byPolicy.all(policy) as PendingRow[],
     /** Rows in the vaults this key added, where it is a required signer, plus its own creations. */
     pendingForSigner: (pkh: string) => mine.all(`%"${pkh}"%`, pkh, pkh) as PendingRow[],
-    /** Every vault someone added here (bounded), with one id for it. */
-    knownVaults: () => (known.all() as { policy: string; vault_id: string }[]).map((r) => ({ policy: r.policy, vaultId: r.vault_id })),
+    /** This key's own creations that haven't landed or failed yet. */
+    unfinishedCreates: (pkh: string) => unfinishedCreates.all(pkh) as PendingRow[],
+    suggest: (pkh: string, policy: string, vaultId: string, name: string | null) => void suggest.run(pkh, policy, vaultId, name),
+    /** Vaults noted for this key that it hasn't added (bounded). */
+    suggestionsFor: (pkh: string) =>
+      (suggestionsFor.all(pkh, pkh) as { policy: string; vault_id: string; name: string | null }[]).map((r) => ({ policy: r.policy, vaultId: r.vault_id, name: r.name })),
     openCount: (policy: string) => (openCount.get(policy) as { n: number }).n,
     openBy: (pkh: string) => (openBy.get(pkh) as { n: number }).n,
     /** Compare-and-set: only one caller moves a row out of `from`. A move back to open counts an attempt. */

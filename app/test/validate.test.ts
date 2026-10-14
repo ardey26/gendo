@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentProblems, buildError, createConfig, createProblems, ownerKeyOf, toLovelace, type AgentForm, type CreateForm } from "../src/owner/validate.ts";
+import { agentProblems, buildError, createConfig, createProblems, ownerHint, ownerKeyOf, toLovelace, type AgentForm, type CreateForm } from "../src/owner/validate.ts";
 import { credentialToAddress } from "../../sdk/src/core/index.ts";
 
 const ok: AgentForm = { name: "payout-bot", agentKey: "9".repeat(56), perPayment: "10", budget: "25", period: "day", payees: ["addr_test1qok"], expires: "2099-01-01", fund: "40" };
@@ -65,4 +65,17 @@ describe("build errors in plain words", () => {
       .toBe("Your wallet is about 16.12316 ADA short. Creating a vault takes about 30 ADA plus what you put in the treasury; preprod's faucet gives test ADA."));
   it("a wallet with no plain-ADA output", () => expect(buildError("wallet needs a pure-ADA UTxO to use as a seed")).toMatch(/plain ADA/));
   it("anything else passes through", () => expect(buildError("something else")).toBe("something else"));
+});
+
+describe("the owner being typed", () => {
+  const me = "11".repeat(28), b = "22".repeat(28);
+  it("says why it can't be added, and nothing while empty or fine", () => {
+    expect(ownerHint("", [], me, "Preprod")).toBeUndefined();
+    expect(ownerHint(b, [], me, "Preprod")).toBeUndefined();
+    expect(ownerHint("addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x", [], me, "Preprod")).toBe("That's a mainnet address. Use the owner's preprod (addr_test1…) address.");
+    expect(ownerHint(credentialToAddress("Preprod", { type: "Script", hash: b }), [], me, "Preprod")).toBe("That's a script address. An owner is a person's wallet address or key hash.");
+    expect(ownerHint("hello", [], me, "Preprod")).toBe("That isn't a wallet address (addr_test1…) or a 56-character key hash.");
+    expect(ownerHint(me, [], me, "Preprod")).toBe("That's you; you're already an owner.");
+    expect(ownerHint(b, [b], me, "Preprod")).toBe("That owner is already listed.");
+  });
 });
