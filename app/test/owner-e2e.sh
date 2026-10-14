@@ -25,5 +25,5 @@ echo "  ok  devnet vault ${POLICY:0:16}… (2 of 2), one agent"
 BLOCKFROST_URL=$STORE BLOCKFROST_PROJECT_ID=devnet VAULT_NETWORK=Custom DB=$T/db.sqlite STATIC_DIR="$T/dist" PORT=8796 "$ROOT/server/gendo-server" 2>"$T/server.log" &
 SRV=$!; trap 'kill $SRV 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do curl -s -o /dev/null http://localhost:8796/ && break; sleep 1; done
-APP=http://localhost:8796 VAULT_ID=$VAULT_ID POLICY=$POLICY UNIT=$UNIT KEY_A=$(cat "$VAULT_HOME/keys/a.sk") KEY_B=$(cat "$VAULT_HOME/keys/b.sk") \
+APP=http://localhost:8796 ADDR_B=$($V keys show b | jq -r .address) VAULT_ID=$VAULT_ID POLICY=$POLICY UNIT=$UNIT KEY_A=$(cat "$VAULT_HOME/keys/a.sk") KEY_B=$(cat "$VAULT_HOME/keys/b.sk") \
   node "$ROOT/app/test/owner-e2e.mjs"

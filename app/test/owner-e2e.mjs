@@ -1,7 +1,7 @@
 // app/test/owner-e2e.mjs: two owners, two browsers, one vault (2 of 2), on the devnet.
-// Env: APP (server URL), VAULT_ID, POLICY, UNIT, KEY_A, KEY_B (bech32 test keys).
+// Env: APP (server URL), VAULT_ID, POLICY, UNIT, KEY_A, KEY_B (bech32 test keys), ADDR_B (B's address).
 import { browser } from "./driver.mjs";
-const { APP, VAULT_ID, POLICY, UNIT, KEY_A, KEY_B } = process.env;
+const { APP, VAULT_ID, POLICY, UNIT, KEY_A, KEY_B, ADDR_B } = process.env;
 const ok = (m) => console.log(`  ok  ${m}`);
 const A = await browser(9341);
 const B = await browser(9342);
@@ -77,6 +77,26 @@ try {
   }
   await A.waitText(/40 ADA per day/);
   ok("the public page shows the new budget from the chain");
+
+  // Create a vault in the app: A names B as the second owner, funds the treasury, signs once.
+  await A.open(`${APP}/new`);
+  await A.waitText(/Create a vault/);
+  await A.fill("cname", "Team vault");
+  await A.fill("cowner", ADDR_B);
+  await A.click(/^Add owner$/);
+  await A.fill("cfund", "20");
+  await A.click(/^Review and create$/);
+  await A.waitText(/Review before signing[\s\S]*Create this vault[\s\S]*Into the vault/);
+  await A.click(/^I've read the warnings$/);
+  await A.click(/^Sign with wallet$/);
+  await A.waitText(/Team vault[\s\S]*Active[\s\S]*2 of 2 owners/, 180_000);
+  ok("owner A created a 2-of-2 vault in the app, funded its treasury, reviewed and signed once; it landed and opened");
+  // B sees it offered on the start page and adds it in one click: no id to paste.
+  await B.open(`${APP}/`);
+  await B.waitText(/Vaults that name you as an owner[\s\S]*Team vault/, 60_000);
+  await B.click(/^Add$/); // the one suggestion; "Add vault" doesn't match
+  await B.waitText(/Team vault[\s\S]*Active/);
+  ok("owner B added it from the suggestion on the start page");
   console.log("PASS");
 } finally {
   A.close();

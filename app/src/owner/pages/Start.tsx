@@ -73,10 +73,12 @@ export function Start() {
       ),
     [o.vaults],
   );
-  const add = async () => {
+  // Vaults the server knows whose owners on chain include you: one click to add, never added for you.
+  const suggested = useLoad(() => api.suggestedVaults(), [o.vaults]);
+  const add = async (vaultId: string) => {
     setErr(undefined);
     try {
-      await api.addVault(id.trim());
+      await api.addVault(vaultId.trim());
       setId("");
       await o.reloadVaults();
     } catch (e) {
@@ -84,14 +86,14 @@ export function Start() {
     }
   };
   return (
-    <Shell title={<span style={{ fontWeight: 700, fontSize: 15 }}>Your agent wallets</span>}>
+    <Shell title={<span style={{ fontWeight: 700, fontSize: 15 }}>Your agent wallets</span>} actions={<Link to="/new" className="btn pri">Create a vault</Link>}>
       <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }} data-ready>
         <section className="panel">
           <div className="scroll">
             <table className="t" style={{ minWidth: 760 }}>
               <thead><tr><th>Vault</th><th>Status</th><th>Owners</th><th className="num">Treasury</th><th className="num">Agents</th><th /></tr></thead>
               <tbody>
-                {o.vaults.length === 0 && <tr><td colSpan={6} className="muted">No vaults yet. Add one by its vault id below (<code className="mono">cli/vault vault info</code> prints it).</td></tr>}
+                {o.vaults.length === 0 && <tr><td colSpan={6} className="muted">No vaults yet. Create one, or add one by its vault id below.</td></tr>}
                 {(rows.data ?? o.vaults.map((v) => ({ v, view: undefined }))).map(({ v, view }) => (
                   <tr key={v.policy}>
                     <td><Link to={`/v/${v.policy}`}><b>{v.name ?? "Unnamed vault"}</b></Link><div className="mono faint" style={{ fontSize: 12 }}>{short(v.vaultId)}</div></td>
@@ -106,16 +108,27 @@ export function Start() {
             </table>
           </div>
         </section>
+        {!!suggested.data?.length && (
+          <section className="panel">
+            <div className="ph"><h2>Vaults that name you as an owner</h2></div>
+            {suggested.data.map((s) => (
+              <div key={s.policy} style={{ padding: "10px 14px", display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", borderTop: "1px solid #2a241e" }}>
+                <span><b>{s.name ?? "Unnamed vault"}</b> <span className="mono faint" style={{ fontSize: 12 }}>{short(s.vaultId)}</span></span>
+                <button type="button" className="btn pri" aria-label={`Add ${s.name ?? "Unnamed vault"}`} onClick={() => void add(s.vaultId)}>Add</button>
+              </div>
+            ))}
+          </section>
+        )}
         <section className="panel">
           <div className="ph"><h2>Add a vault</h2></div>
           <div style={{ padding: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <label htmlFor="vid" className="cap" style={{ width: "100%" }}>Vault id (gendo:preprod:…). You must be one of its owners.</label>
             <input id="vid" value={id} onChange={(e) => setId(e.target.value)} placeholder="gendo:preprod:<tx>#<i>:<tx>#<i>" style={{ flex: "1 1 360px" }} />
-            <button type="button" className="btn pri" onClick={add} disabled={!id.trim()}>Add vault</button>
+            <button type="button" className="btn" onClick={() => void add(id)} disabled={!id.trim()}>Add vault</button>
           </div>
           <div style={{ padding: "0 14px 14px" }}><ErrorNote error={err} /></div>
         </section>
-        <p className="faint" style={{ fontSize: 12, margin: 0 }}>Vaults where {short(o.me.address)} is an owner and that you added here. Creating a vault in the app is coming; for now, <code className="mono">cli/vault vault create</code>.</p>
+        <p className="faint" style={{ fontSize: 12, margin: 0 }}>Vaults where {short(o.me.address)} is an owner and that you added here. Another owner's vault id comes from them, or from <code className="mono">cli/vault vault info</code>.</p>
       </div>
     </Shell>
   );

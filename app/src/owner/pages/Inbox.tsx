@@ -21,7 +21,8 @@ export function Inbox() {
   const [err, setErr] = useState<string>();
   const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
   const items = useLoad(async (): Promise<Item[]> => {
-    const rows = await api.myPending();
+    // Creations are followed on the create page, not signed here.
+    const rows = (await api.myPending()).filter((p) => p.kind !== "create");
     const labels: Record<string, Record<string, string>> = {};
     return Promise.all(
       rows.map(async (p) => {

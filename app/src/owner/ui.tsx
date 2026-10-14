@@ -113,6 +113,7 @@ export function Shell({ policy, tab, title, actions, children }: { policy?: stri
           )}
           <div className="sidecap cap">Account</div>
           {nav("/", "All vaults", location.pathname === "/")}
+          {nav("/new", "Create a vault", location.pathname === "/new")}
           <div style={{ flexGrow: 1, minHeight: 16 }} />
           <div style={{ borderTop: "1px solid #2a241e", padding: "12px 10px 4px", display: "flex", flexDirection: "column", gap: 6 }}>
             <span className="mono" style={{ fontSize: 12 }}>{short(o.me.address)}</span>
