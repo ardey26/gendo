@@ -11,7 +11,7 @@ Think of it as a company card for an AI agent. A team of owners holds the money 
 ### Who does what
 | Who | Uses | Can |
 |---|---|---|
-| **Owners** (a team of humans, any m of n) | The CLI (`cli/vault`), each with their own key | Create the vault, set the limits, approve over-limit payments, pause everything, revoke an allowance |
+| **Owners** (a team of humans, any m of n) | The owner app with a CIP-30 wallet, or the CLI (`cli/vault`); each with their own key | Create the vault, set the limits, approve over-limit payments, pause everything, revoke an allowance |
 | **Agent operator** (a human) | The signer daemon | Holds the agent's key, so the agent never does, and adds its own rate and daily limits |
 | **The agent** (your AI) | The MCP server (`mcp/gendo-mcp`), or the CLI or SDK | Check its budget, pay within it, ask the owners for more. It holds no key and can't change its own limits |
 | **The chain** (the vault's validator) | — | Rejects any payment outside the limits, whoever builds it |
@@ -113,7 +113,7 @@ cli/test/separated.sh                   # the skill's setup with owners, signer 
 cli/test/signer-user.sh                 # the signer as its own Linux user (runs in a container)
 mcp/test/e2e.sh                         # an MCP client driving the agent's three tools
 app/test/public-e2e.sh                  # the public vault page in headless Chrome, served by the keyless server
-app/test/owner-e2e.sh                   # two owners in two headless browsers: sign in, pause, unpause, a budget raise through the inbox
+app/test/owner-e2e.sh                   # two owners in two headless browsers: sign in, pause, unpause, a budget raise through the inbox, creating a 2-of-2 vault in the app
 server/test/approvals-e2e.sh            # owners sign in, pause, unpause and approve an agent request through the server
 agent/test/e2e.sh                       # LLM agent (local Ollama model) paying invoices through the signer
 
@@ -347,7 +347,7 @@ The adversary is a compromised agent key that builds arbitrary transactions.
 
 ## Roadmap
 Not built yet. None of this is a guarantee until it ships with tests and an audit.
-- **The owner app, next steps.** It exists today (preprod; `server/gendo-server` serves it): owners sign in with their own CIP-30 wallets, see every change computed from the chain before signing, approve agent requests, pause, and edit agents; plus a public read-only page per vault. Still to come: creating a vault in the app (a wizard with invite links), notifications, and an activity feed that includes revoked agents and treasury movements. It uses a small keyless server for pending approvals and notifications. **That server can affect liveness, never custody:** if it's down or hostile, approvals and notifications stop, but no funds can move without owners' wallets, and the CLI remains the fallback for every owner action.
+- **The owner app, next steps.** It exists today (preprod; `server/gendo-server` serves it): owners sign in with their own CIP-30 wallets, see every change computed from the chain before signing, approve agent requests, pause, and edit agents; plus a public read-only page per vault. Owners can also create a vault in the app; co-owners then see it offered on their start page. Still to come: invite links (today co-owners are named by address), notifications, and an activity feed that includes revoked agents and treasury movements. It uses a small keyless server for pending approvals and notifications. **That server can affect liveness, never custody:** if it's down or hostile, approvals and notifications stop, but no funds can move without owners' wallets, and the CLI remains the fallback for every owner action.
 - **DeFi through per-protocol adapters.** Opt-in per protocol. Each adapter is a small validator, audited before it ships, that forces all proceeds back to the vault. The first target is Minswap V2 swaps. Design and preprod verifications: `docs/DEFI_SPIKE.md`.
 - **Sharded sub-allowances** to lift the one-spend-per-block limit (see [Known limitations](#known-limitations)).
 - **A sliding window** in place of fixed windows, removing the 2× burst.
@@ -391,13 +391,13 @@ Test counts at the time of writing:
 |---|---|
 | On-chain Aiken tests | 210 (196 unit/adversarial, 14 property) |
 | Mutations killed (each by at least one unit test, so no kill depends on a property test's luck) | 85 |
-| SDK unit + emulator tests | 146 |
-| Keyless server (chain proxy, listings, sign-in, inbox, agent requests, limits) | 42 |
-| App (formatting, routes, what a pending tx does, inbox status and polling, agent form and edit rules, recipes and rebuild matching, vault list, API and wallet errors) | 40 |
-| Owner app end to end (devnet, two owners in two headless browsers) | 10 checks |
+| SDK unit + emulator tests | 152 |
+| Keyless server (chain proxy, listings, sign-in, inbox, agent requests, vault creation and suggestions, limits) | 53 |
+| App (formatting, routes, what a pending tx does, inbox status and polling, agent form and edit rules, recipes and rebuild matching, vault list, the create form, API and wallet errors) | 51 |
+| Owner app end to end (devnet, two owners in two headless browsers, including creating a vault in the app) | 12 checks |
 | Public page end to end (devnet, headless Chrome) | 8 checks |
 | Approvals through the server (devnet: sign-in, single-owner pause, 2-of-2 unpause, an agent request via MCP, server down and retry) | 8 checks |
-| Adversarial replays (devnet PV10; preprod PV11) | 38 on devnet; 34 on preprod |
+| Adversarial replays (devnet PV10; preprod PV11) | 38 on devnet; 38 on preprod |
 | Double-pay scenarios incl. signer dedupe (devnet and preprod) | 6 each |
 | CLI smoke checks | 19 |
 | Separated-roles flow (owners, signer and agent in separate homes) | 11 checks |
@@ -406,7 +406,7 @@ Test counts at the time of writing:
 | LLM agent end-to-end (devnet) | safety checks pass; escalation co-signed |
 | Preprod demo (all links in `demo/RESULTS.md`) | 16 txs, 11 refusals, including two LLM agent runs |
 
-Every devnet suite above has been re-run against the current vault hash, which adds the emergency pause. Preprod (34/34 attacks, 6/6 double-pay) was last run on the build just before it, and the 4 pause replays have not run on preprod yet; a single-owner pause built in the browser and signed in Lace has landed on preprod. The preprod demo (`demo/RESULTS.md`) is from an earlier build.
+Every devnet suite above has been re-run against the current vault hash, which adds the emergency pause. On preprod, the current hash passed 6/6 double-pay and 37/38 attacks in one run; the 38th (a non-owner pausing) never reached the chain because the test's attacker wallet ran out of ADA, and it passed when rerun with the pause tests after a test funding fix. A single-owner pause built in the browser and signed in Lace has landed on preprod. Creating a vault in the app is tested on the devnet with test wallets; it hasn't been done with a real wallet on preprod yet. The preprod demo (`demo/RESULTS.md`) is from an earlier build.
 
 ## License
 
