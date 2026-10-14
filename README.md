@@ -391,8 +391,8 @@ Test counts at the time of writing:
 |---|---|
 | On-chain Aiken tests | 210 (196 unit/adversarial, 14 property) |
 | Mutations killed (each by at least one unit test, so no kill depends on a property test's luck) | 85 |
-| SDK unit + emulator tests | 154 |
-| Keyless server (chain proxy, listings, sign-in, inbox, agent requests, vault creation and suggestions, limits) | 56 |
+| SDK unit + emulator tests | 155 |
+| Keyless server (chain proxy, listings, sign-in, inbox, agent requests, vault creation and suggestions, limits) | 57 |
 | App (formatting, routes, what a pending tx does, inbox status and polling, agent form and edit rules, recipes and rebuild matching, vault list, the create form, API and wallet errors) | 52 |
 | Owner app end to end (devnet, two owners in two headless browsers, including creating a vault in the app) | 12 checks |
 | Public page end to end (devnet, headless Chrome) | 8 checks |
