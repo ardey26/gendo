@@ -66,12 +66,17 @@ describe("detailOf", () => {
   it("sentence matches the public page's", () => expect(sentence(al(10_000_000n, 25_000_000n, 1), 1)).toBe("This agent can pay up to 10 ADA at a time and 25 ADA per day, only to this address, until 2026-11-30."));
   it("a creation: its owners and threshold, the reference script named, money into the vault", () => {
     const c = { owners: [h(1), h(2)], threshold: 2n, paused: false, maxTxValidityMs: 600_000n };
-    const d = detailOf({ ...base, changes: [{ kind: "config", before: null, after: c }],
+    const d = detailOf({ ...base, changes: [{ kind: "config", before: null, after: c, deposit: 2_000_000n }],
       flows: [{ address: "addr_test1wvault", delta: { lovelace: 22_000_000n } }, { address: "addr_test1wholder", delta: { lovelace: 27_000_000n } }] }, { ...ctx, refHolder: "addr_test1wholder" });
     expect(d.title).toBe("Create this vault");
     expect(d.summary).toBe("Creates a vault with 2 owners. Any 2 of them approve changes; any one can pause.");
     expect(d.rows).toContainEqual({ k: "Owner added", now: "—", next: h(2), changed: true });
-    expect(d.money).toContainEqual({ label: "Into the vault", value: "22 ADA" });
+    expect(d.money).toContainEqual({ label: "Vault settings deposit (stays with the vault)", value: "2 ADA" });
+    expect(d.money).toContainEqual({ label: "Into the treasury", value: "20 ADA" });
+    expect(d.money.some((m) => m.label === "Into the vault")).toBe(false);
+    // No deposit asked for: only the settings deposit shows.
+    const none = detailOf({ ...base, changes: [{ kind: "config", before: null, after: c, deposit: 2_000_000n }], flows: [{ address: "addr_test1wvault", delta: { lovelace: 2_000_000n } }] }, ctx);
+    expect(none.money.map((m) => m.label)).toEqual(["Vault settings deposit (stays with the vault)"]);
     expect(d.money).toContainEqual({ label: "Reference script (locked for good; it lowers every agent payment's fee)", value: "27 ADA" });
   });
 });

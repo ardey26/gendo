@@ -13,7 +13,7 @@ import type { Vault } from "./vault.js";
 type Qty = Record<string, bigint>;
 
 export type Change =
-  | { kind: "config"; before: ConfigDatum | null; after: ConfigDatum | null }
+  | { kind: "config"; before: ConfigDatum | null; after: ConfigDatum | null; /** A new vault: the ADA held with its config. */ deposit?: bigint }
   | { kind: "grant"; unit: string; after: AllowanceDatum | null; lovelace: bigint }
   | { kind: "edit"; unit: string; before: AllowanceDatum | null; after: AllowanceDatum | null; lovelaceBefore: bigint; lovelaceAfter: bigint }
   | { kind: "revoke"; unit: string; before: AllowanceDatum | null; lovelace: bigint }
@@ -96,7 +96,11 @@ export function explainTx(txCbor: string, vault: Vault, resolvedInputs: UTxO[], 
   const changes: Change[] = [];
   const cfgIn = vaultIns.find((u) => ((u.assets as Qty)[vault.configUnit] ?? 0n) > 0n);
   const cfgOut = vaultOuts.find((o) => (o.assets[vault.configUnit] ?? 0n) > 0n);
-  if (cfgIn || cfgOut) changes.push({ kind: "config", before: tryDecode(configFromData, cfgIn?.datum), after: tryDecode(configFromData, cfgOut?.datum) });
+  if (cfgIn || cfgOut)
+    changes.push({
+      kind: "config", before: tryDecode(configFromData, cfgIn?.datum), after: tryDecode(configFromData, cfgOut?.datum),
+      ...(!cfgIn && cfgOut ? { deposit: cfgOut.assets.lovelace ?? 0n } : {}),
+    });
   const seen = new Set<string>();
   for (const u of vaultIns)
     for (const unit of allowanceUnits(u.assets as Qty)) {

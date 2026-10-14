@@ -109,6 +109,12 @@ export function detailOf(e: Explanation, ctx: Ctx): Detail {
   const cfg = e.changes.find((c) => c.kind === "config");
   if (cfg && cfg.kind === "config" && !cfg.before && cfg.after) {
     const c = cfg.after;
+    // What goes into a new vault is two things: the ADA held with its settings, and the treasury.
+    const deposit = cfg.deposit ?? 0n;
+    const i = money.findIndex((m) => m.label === "Into the vault");
+    if (i >= 0) money.splice(i, 1);
+    money.push({ label: "Vault settings deposit (stays with the vault)", value: `${ada(deposit)} ADA` });
+    if (intoVault > deposit) money.push({ label: "Into the treasury", value: `${ada(intoVault - deposit)} ADA` });
     return out({ kind: "Change", title: "Create this vault", summary: `Creates a vault with ${c.owners.length} owner${c.owners.length === 1 ? "" : "s"}. Any ${c.threshold} of them approve changes; any one can pause.`, rows: configRows(null, c, ctx) });
   }
   if (cfg && cfg.kind === "config") {

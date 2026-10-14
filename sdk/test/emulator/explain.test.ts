@@ -67,6 +67,17 @@ describe("explainTx", () => {
     expect(e.ttlSlot).toBeTypeOf("number");
   });
 
+  it("a creation: the new config and the ADA held with it, apart from the treasury deposit", async () => {
+    lucid.selectWallet.fromPrivateKey(w.a.privateKey);
+    const init = { owners: [w.a.pkh, w.b.pkh], threshold: 2n, paused: false, maxTxValidityMs: HOUR };
+    const { tx, vault: v } = await owner.createVault(lucid, init, { fund: 20n * ADA, signer: w.a.pkh });
+    const cbor = tx.toCBOR();
+    const e = explainTx(cbor, v, await inputsOf(cbor), { viewer: w.a.pkh });
+    const cfgOut = tx.toTransaction().body().outputs().get(0).amount().coin();
+    expect(e.changes).toEqual([{ kind: "config", before: null, after: init, deposit: cfgOut }]);
+    expect(e.flows.find((f) => f.address === v.address)?.delta.lovelace).toBe(cfgOut + 20n * ADA);
+  });
+
   it("a revoke returns the funds to the vault", async () => {
     const al = await readAllowance(lucid, vault, unit);
     const e = await explain((await owner.revokeAllowance(lucid, vault, await readConfig(lucid, vault), al, [w.a.pkh, w.b.pkh])).toCBOR());

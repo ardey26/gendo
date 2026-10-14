@@ -86,7 +86,7 @@ try {
   await A.click(/^Add owner$/);
   await A.fill("cfund", "20");
   await A.click(/^Review and create$/);
-  await A.waitText(/Review before signing[\s\S]*Create this vault[\s\S]*Into the vault/);
+  await A.waitText(/Review before signing[\s\S]*Create this vault[\s\S]*Into the treasury/);
   await A.click(/^I've read the warnings$/);
   await A.click(/^Sign with wallet$/);
   await A.waitText(/Team vault[\s\S]*Active[\s\S]*2 of 2 owners/, 180_000);
