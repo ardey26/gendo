@@ -4,6 +4,18 @@ import { parseRoute } from "./route.ts";
 import "./ui/gendo.css";
 import { Spinner } from "./ui/Brand.tsx";
 
+// A tab older than the files kept after a deploy: reload once onto the current build.
+addEventListener("vite:preloadError", () => {
+  try {
+    const last = Number(sessionStorage.getItem("gendo.reloadedAt") ?? 0);
+    if (Date.now() - last < 60_000) return; // just reloaded: don't loop
+    sessionStorage.setItem("gendo.reloadedAt", String(Date.now()));
+  } catch {
+    // no storage: one reload is still better than a dead page
+  }
+  location.reload();
+});
+
 const network = (import.meta.env.VITE_NETWORK ?? "Preprod") as "Preprod" | "Custom";
 const PublicPage = lazy(() => import("./public/PublicPage.tsx").then((m) => ({ default: m.PublicPage })));
 // Owner routes need Lucid: the Buffer polyfill must run before any of it loads.

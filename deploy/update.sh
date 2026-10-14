@@ -17,6 +17,12 @@ systemctl daemon-reload
 for d in sdk server app; do as npm ci --prefix "$d" --no-audit --no-fund --loglevel=error; done
 rm -rf app/dist-next
 as env VITE_NETWORK=Preprod npm run build --prefix app --silent -- --outDir dist-next --emptyOutDir
+# Keep earlier builds' files for a week: a tab opened before this deploy still loads the
+# pages it hasn't visited yet. File names carry a content hash, so nothing collides.
+if [ -d app/dist/assets ]; then
+  cp -pn app/dist/assets/* app/dist-next/assets/ 2>/dev/null || true
+  find app/dist-next/assets -type f -mtime +7 -delete
+fi
 rm -rf app/dist && mv app/dist-next app/dist
 systemctl restart gendo
 echo "$new" > /var/lib/gendo-deploy/deployed
