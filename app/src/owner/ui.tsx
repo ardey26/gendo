@@ -97,7 +97,7 @@ export function Shell({ policy, tab, title, actions, children }: { policy?: stri
     <Link to={to} className={on ? "nav on" : "nav"}>{label}{extra}</Link>
   );
   return (
-    <div className="app">
+    <div className="app frame">
       <Netband />
       <div className="shell">
         <nav className="side" aria-label="Main">

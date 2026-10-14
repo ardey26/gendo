@@ -41,6 +41,8 @@ a{color:#efe7d8}a:hover{color:#e0452b}
 .shell{display:flex;flex-wrap:wrap;min-height:100vh}
 .side{flex:1 1 232px;border-right:1px solid #2a241e;background:#0f0d0a;padding:12px 10px;display:flex;flex-direction:column;gap:2px;box-sizing:border-box}
 .content{flex:999 1 560px;min-width:0;display:flex;flex-direction:column}
+/* Side by side, the app fills the screen: the sidebar stays put (its account footer always visible) and the content scrolls. */
+@media (min-width:800px){.frame{height:100vh;height:100dvh;display:flex;flex-direction:column}.frame .shell{flex:1;min-height:0;flex-wrap:nowrap}.frame .side{overflow-y:auto}.frame .content{overflow-y:auto}}
 .nav{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;color:#b9afa0;text-decoration:none;font-size:13px;background:transparent;border:0;font-family:inherit;cursor:pointer;text-align:left;width:100%;box-sizing:border-box}
 .nav:hover{background:#15120f;color:#efe7d8}
 .nav.on{background:#1a1612;color:#efe7d8}

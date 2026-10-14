@@ -91,7 +91,7 @@ export function Start() {
             <table className="t" style={{ minWidth: 760 }}>
               <thead><tr><th>Vault</th><th>Status</th><th>Owners</th><th className="num">Treasury</th><th className="num">Agents</th><th /></tr></thead>
               <tbody>
-                {o.vaults.length === 0 && <tr><td colSpan={6} className="muted">No vaults yet. Add one by its vault id below (`cli/vault vault info` prints it).</td></tr>}
+                {o.vaults.length === 0 && <tr><td colSpan={6} className="muted">No vaults yet. Add one by its vault id below (<code className="mono">cli/vault vault info</code> prints it).</td></tr>}
                 {(rows.data ?? o.vaults.map((v) => ({ v, view: undefined }))).map(({ v, view }) => (
                   <tr key={v.policy}>
                     <td><Link to={`/v/${v.policy}`}><b>{v.name ?? "Unnamed vault"}</b></Link><div className="mono faint" style={{ fontSize: 12 }}>{short(v.vaultId)}</div></td>
@@ -115,7 +115,7 @@ export function Start() {
           </div>
           <div style={{ padding: "0 14px 14px" }}><ErrorNote error={err} /></div>
         </section>
-        <p className="faint" style={{ fontSize: 12, margin: 0 }}>Vaults where {short(o.me.address)} is an owner and that you added here. Creating a vault in the app is coming; for now, `cli/vault vault create`.</p>
+        <p className="faint" style={{ fontSize: 12, margin: 0 }}>Vaults where {short(o.me.address)} is an owner and that you added here. Creating a vault in the app is coming; for now, <code className="mono">cli/vault vault create</code>.</p>
       </div>
     </Shell>
   );
