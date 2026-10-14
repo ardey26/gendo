@@ -1,6 +1,7 @@
 // The agent editor's rules: the chain's own (is_well_formed) plus what makes a form usable.
 import { MAX_DESTINATIONS, MAX_OWNERS } from "../../../sdk/src/core/limits.ts";
 import { toPlutusAddress } from "../../../sdk/src/core/address.ts";
+import { refHolderAddress } from "../../../sdk/src/core/vault.ts";
 import type { AllowanceDatum, ConfigDatum, PlutusAddress } from "../../../sdk/src/core/data.ts";
 import { ada } from "../public/format.ts";
 
@@ -54,7 +55,8 @@ export function editedDatum(
 // --- creating a vault --------------------------------------------------------
 
 /** `owners` are the other owners, as typed; the creator is always the first owner. */
-export type CreateForm = { name: string; owners: string[]; threshold: string; windowMin: "2" | "10" | "60"; fund: string };
+/** `refScript`: park the vault's code on chain (locked for good) so each agent payment costs a little less. */
+export type CreateForm = { name: string; owners: string[]; threshold: string; windowMin: "2" | "10" | "60"; fund: string; refScript: boolean };
 
 /** A wallet's payment key hash from a key hash or a testnet wallet address; undefined for anything else. */
 export function ownerKeyOf(s: string, net: "Preprod" | "Custom"): string | undefined {
@@ -120,7 +122,12 @@ export function createConfig(f: CreateForm, me: string, net: "Preprod" | "Custom
 /** A failed build, said plainly: the wallet libraries' messages aren't meant for people. */
 export function buildError(message: string): string {
   const short = /not have enough funds[\s\S]*?"lovelace":\s*"(\d+)n?"/.exec(message);
-  if (short) return `Your wallet is about ${ada(BigInt(short[1]!))} ADA short. Creating a vault takes about 30 ADA plus what you put in the treasury; preprod's faucet gives test ADA.`;
+  if (short) return `Your wallet is about ${ada(BigInt(short[1]!))} ADA short. Creating a vault takes about 2 ADA (about 30 with cheaper agent payments) plus what you put in the treasury; preprod's faucet gives test ADA.`;
   if (/pure-ADA UTxO/.test(message)) return "Your wallet needs some plain ADA (an output holding no tokens) to create a vault.";
   return message;
+}
+
+/** What createVault gets: the treasury deposit, the creator as signer, and the reference script only if asked for. */
+export function createOptions(f: CreateForm, me: string, net: "Preprod" | "Custom"): { fund: bigint; signer: string; refScriptAddress?: string } {
+  return { fund: toLovelace(f.fund) ?? 0n, signer: me, ...(f.refScript ? { refScriptAddress: refHolderAddress(net) } : {}) };
 }

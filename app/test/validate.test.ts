@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentProblems, buildError, createConfig, createProblems, ownerHint, ownerKeyOf, toLovelace, type AgentForm, type CreateForm } from "../src/owner/validate.ts";
+import { agentProblems, buildError, createConfig, createOptions, createProblems, ownerHint, ownerKeyOf, toLovelace, type AgentForm, type CreateForm } from "../src/owner/validate.ts";
 import { credentialToAddress } from "../../sdk/src/core/index.ts";
 
 const ok: AgentForm = { name: "payout-bot", agentKey: "9".repeat(56), perPayment: "10", budget: "25", period: "day", payees: ["addr_test1qok"], expires: "2099-01-01", fund: "40" };
@@ -31,7 +31,7 @@ describe("create a vault", () => {
   const me = "11".repeat(28), b = "22".repeat(28);
   const bAddr = credentialToAddress("Preprod", { type: "Key", hash: b });
   const scriptAddr = credentialToAddress("Preprod", { type: "Script", hash: b });
-  const f = (x: Partial<CreateForm> = {}): CreateForm => ({ name: "Team", owners: [bAddr], threshold: "2", windowMin: "10", fund: "0", ...x });
+  const f = (x: Partial<CreateForm> = {}): CreateForm => ({ name: "Team", owners: [bAddr], threshold: "2", windowMin: "10", fund: "0", refScript: false, ...x });
   it("an owner is a key hash or a testnet wallet address", () => {
     expect(ownerKeyOf(b, "Preprod")).toBe(b);
     expect(ownerKeyOf(bAddr, "Preprod")).toBe(b);
@@ -62,7 +62,7 @@ describe("create a vault", () => {
 describe("build errors in plain words", () => {
   it("a wallet short of ADA says by how much", () =>
     expect(buildError('{ Complete: Your wallet does not have enough funds to cover the required assets: { "lovelace": "16123160n" } Or it contains UTxOs with reference scripts; which are excluded from coin selection. }'))
-      .toBe("Your wallet is about 16.12316 ADA short. Creating a vault takes about 30 ADA plus what you put in the treasury; preprod's faucet gives test ADA."));
+      .toBe("Your wallet is about 16.12316 ADA short. Creating a vault takes about 2 ADA (about 30 with cheaper agent payments) plus what you put in the treasury; preprod's faucet gives test ADA."));
   it("a wallet with no plain-ADA output", () => expect(buildError("wallet needs a pure-ADA UTxO to use as a seed")).toMatch(/plain ADA/));
   it("anything else passes through", () => expect(buildError("something else")).toBe("something else"));
 });
@@ -78,4 +78,13 @@ describe("the owner being typed", () => {
     expect(ownerHint(me, [], me, "Preprod")).toBe("That's you; you're already an owner.");
     expect(ownerHint(b, [b], me, "Preprod")).toBe("That owner is already listed.");
   });
+});
+
+describe("what creating a vault builds", () => {
+  const me = "11".repeat(28);
+  const f: CreateForm = { name: "Team", owners: [], threshold: "1", windowMin: "10", fund: "10", refScript: false };
+  it("by default no reference script: nothing is locked for good", () =>
+    expect(createOptions(f, me, "Preprod")).toEqual({ fund: 10_000_000n, signer: me }));
+  it("opted in: the code is parked at the always-fail holder", () =>
+    expect(createOptions({ ...f, refScript: true }, me, "Preprod").refScriptAddress).toMatch(/^addr_test1w/));
 });

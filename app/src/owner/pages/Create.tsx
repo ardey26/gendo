@@ -4,11 +4,11 @@
 import { useState } from "react";
 import { Spinner } from "../../ui/Brand.tsx";
 import { navigate } from "../../route.ts";
-import { owner, refHolderAddress } from "../../../../sdk/src/core/index.ts";
+import { owner } from "../../../../sdk/src/core/index.ts";
 import { api } from "../api.ts";
 import { explainFor, useReview } from "../review.tsx";
 import { Copy, ErrorNote, Shell, short, useOwner, usePoll } from "../ui.tsx";
-import { buildError, createConfig, createProblems, ownerHint, toLovelace, type CreateForm } from "../validate.ts";
+import { buildError, createConfig, createOptions, createProblems, ownerHint, type CreateForm } from "../validate.ts";
 import { partialSign } from "../wallet.ts";
 
 type Made = { id: string; vaultId: string; policy: string; status: string; error?: string };
@@ -16,7 +16,7 @@ type Made = { id: string; vaultId: string; policy: string; status: string; error
 export function Create() {
   const o = useOwner();
   const review = useReview(o.net);
-  const [f, setF] = useState<CreateForm>({ name: "", owners: [], threshold: "1", windowMin: o.net === "Custom" ? "2" : "10", fund: "0" });
+  const [f, setF] = useState<CreateForm>({ name: "", owners: [], threshold: "1", windowMin: o.net === "Custom" ? "2" : "10", fund: "0", refScript: false });
   const [next, setNext] = useState("");
   const [busy, setBusy] = useState<string>();
   const [err, setErr] = useState<string>();
@@ -39,9 +39,7 @@ export function Create() {
     setErr(undefined);
     setBusy("Building the vault in your browser…");
     try {
-      const { tx, vault } = await owner.createVault(o.lucid, createConfig(f, o.me.pkh, o.net), {
-        refScriptAddress: refHolderAddress(o.net), fund: toLovelace(f.fund) ?? 0n, signer: o.me.pkh,
-      });
+      const { tx, vault } = await owner.createVault(o.lucid, createConfig(f, o.me.pkh, o.net), createOptions(f, o.me.pkh, o.net));
       const p = await explainFor(o, vault, tx.toCBOR(), {});
       setBusy(undefined);
       if (!(await review.ask(p))) return;
@@ -124,11 +122,19 @@ export function Create() {
 
             <label className="cap" htmlFor="cfund" style={{ marginTop: 6 }}>ADA to put in the treasury now (optional)</label>
             <input id="cfund" inputMode="decimal" value={f.fund} onChange={(e) => setF({ ...f, fund: e.target.value })} />
+
+            <label style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 6, cursor: "pointer" }}>
+              <input type="checkbox" checked={f.refScript} onChange={(e) => setF({ ...f, refScript: e.target.checked })} style={{ marginTop: 3 }} />
+              <span>
+                Lower every agent payment's fee (by about 0.18 ADA)
+                <span className="faint" style={{ display: "block", fontSize: 12 }}>Parks a copy of the vault's code on chain, which locks about 28 ADA for good. Worth it past roughly 150 agent payments.</span>
+              </span>
+            </label>
           </div>
         </section>
         <div className="note">
           {n === 1 ? "Only you own it: you approve every change alone." : `Any ${f.threshold} of the ${n} owners approve changes; any one owner can pause every agent at once.`}{" "}
-          Creating it also parks a copy of the vault's script on chain (about 27 ADA, locked for good), so every agent payment costs less.
+          Creating it costs the network fee plus about 1.3 ADA that stays with the vault's settings{f.refScript ? ", and about 28 ADA locked for good for the cheaper agent payments" : ""}.
         </div>
         {f.name.trim() && problems.length > 0 && <ErrorNote error={problems.join(" ")} />}
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
