@@ -43,7 +43,7 @@ sequenceDiagram
 All three, one per role. Only the chain is trusted.
 - **MCP server:** the agent's front door. Three tools: `get_budget`, `pay`, `request_approval`. No owner operation is exposed.
 - **CLI:** the owners' tool: set up the vault, set the limits, sign approvals, pause and revoke. Also for scripts.
-- **Skill** (`npx skills add ardey26/gendo`): teaches an agent the rules (never hold owner keys, reuse intent ids, what each refusal means) and walks humans through setup.
+- **Skill** (`npx skills add gendo-cash/gendo`): teaches an agent the rules (never hold owner keys, reuse intent ids, what each refusal means) and walks humans through setup.
 - **SDK** (TypeScript): for builders. Everything above is built on it.
 
 The name is 限度 (*gendo*), Japanese for a limit, as in 限度額, the spending limit on a credit card.

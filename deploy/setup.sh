@@ -3,7 +3,7 @@
 # Needs /etc/gendo/env holding BLOCKFROST_PROJECT_ID=… (preprod). Usage: DOMAIN=app.gendo.cash bash setup.sh
 set -euo pipefail
 DOMAIN=${DOMAIN:?set DOMAIN}
-REPO=${REPO:-https://github.com/ardey26/gendo.git}
+REPO=${REPO:-https://github.com/gendo-cash/gendo.git}
 NODE=24.11.0
 test -s /etc/gendo/env || { echo "missing /etc/gendo/env"; exit 1; }
 chmod 600 /etc/gendo/env
