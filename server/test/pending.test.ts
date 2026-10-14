@@ -139,6 +139,21 @@ describe("pending inbox", () => {
     expect(submitted).toHaveLength(0);
   });
 
+  it("a submitted tx that never landed fails once the chain is past its expiry, and not before", async () => {
+    let tip = 0;
+    const { A, txFor, app, session, propose } = await setup({
+      upstream: async (p) => (p === "/blocks/latest" ? new Response(JSON.stringify({ slot: tip })) : new Response("{}", { status: 404 })),
+    });
+    const cbor = await txFor([A.pkh]);
+    const ttl = Number(CML.Transaction.from_cbor_hex(cbor).body().ttl());
+    expect(await (await propose(A, cbor)).json()).toMatchObject({ status: "submitted" });
+    const read = async () => ((await (await app.request("/me/pending", { headers: await session(A) })).json()) as { status: string; error?: string }[])[0]!;
+    tip = ttl + 30; // just past it: the indexer may still be catching up
+    expect((await read()).status).toBe("submitted");
+    tip = ttl + 1_000;
+    expect(await read()).toMatchObject({ status: "failed", error: expect.stringMatching(/expired before it reached the chain/) });
+  });
+
   it("a row stuck in submitting (a crash mid-submit) is resolved on the next read", async () => {
     let t = 1_000_000;
     let hang = true;

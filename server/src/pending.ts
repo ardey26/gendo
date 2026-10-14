@@ -31,6 +31,8 @@ type Deps = {
 type Auth = ReturnType<typeof mountAuth>;
 
 const MAX_ATTEMPTS = 5;
+/** Slots past a tx's expiry before "not on chain" is final: the indexer can trail the tip. */
+const SETTLE_SLOTS = 120;
 const STUCK_MS = 2 * 60_000;
 const isHex = (s: unknown, max: number): s is string => typeof s === "string" && s.length <= max && /^[0-9a-f]+$/.test(s) && s.length % 2 === 0;
 const isPolicy = (s: string) => /^[0-9a-f]{56}$/.test(s);
@@ -113,7 +115,16 @@ export function mountPending(app: Hono, d: Deps, auth: Auth) {
   };
   /** Bring a row up to date: landed, a stuck submit, a retry after a transient error. */
   const refresh = async (r: PendingRow) => {
-    if (r.status === "submitted" && r.tx_hash && (await onChain(r.tx_hash))) d.store.setStatus(r.id, "submitted", "landed", d.now());
+    if (r.status === "submitted" && r.tx_hash) {
+      if (await onChain(r.tx_hash)) d.store.setStatus(r.id, "submitted", "landed", d.now());
+      else {
+        // Dropped on the way (a node restart, a full mempool): once it's past its expiry it can never land.
+        const ttl = ttlSlotOf(r.cbor);
+        const tip = ttl === undefined ? undefined : await tipSlot();
+        if (ttl !== undefined && tip !== undefined && tip > ttl + SETTLE_SLOTS)
+          d.store.setStatus(r.id, "submitted", "failed", d.now(), { error: "it expired before it reached the chain; build it again" });
+      }
+    }
     if (r.status === "submitting" && d.now() - r.updated_at > STUCK_MS) {
       if (await onChain(r.body_hash)) d.store.setStatus(r.id, "submitting", "landed", d.now(), { txHash: r.body_hash });
       else d.store.setStatus(r.id, "submitting", "open", d.now(), { error: "the last submit didn't finish; retrying" });
