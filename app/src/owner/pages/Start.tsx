@@ -90,18 +90,18 @@ export function Start() {
       <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }} data-ready>
         <section className="panel">
           <div className="scroll">
-            <table className="t" style={{ minWidth: 760 }}>
+            <table className="t cards" style={{ minWidth: 760 }}>
               <thead><tr><th>Vault</th><th>Status</th><th>Owners</th><th className="num">Treasury</th><th className="num">Agents</th><th /></tr></thead>
               <tbody>
                 {o.vaults.length === 0 && <tr><td colSpan={6} className="muted">No vaults yet. Create one, or add one by its vault id below.</td></tr>}
                 {(rows.data ?? o.vaults.map((v) => ({ v, view: undefined }))).map(({ v, view }) => (
                   <tr key={v.policy}>
-                    <td><Link to={`/v/${v.policy}`}><b>{v.name ?? "Unnamed vault"}</b></Link><div className="mono faint" style={{ fontSize: 12 }}>{short(v.vaultId)}</div></td>
-                    <td><span className={view?.config?.paused ? "pill fill" : "pill"}>{view?.config ? (view.config.paused ? "Paused" : "Active") : "—"}</span></td>
-                    <td className="mono">{view?.config ? `${view.config.threshold} of ${view.config.owners.length}` : "—"}</td>
-                    <td className="num">{view ? `${ada(view.treasuryLovelace)} ADA` : "—"}</td>
-                    <td className="num">{view ? view.allowances.length : "—"}</td>
-                    <td className="num"><Link to={`/v/${v.policy}`} className="btn">Open</Link></td>
+                    <td className="lead"><Link to={`/v/${v.policy}`}><b>{v.name ?? "Unnamed vault"}</b></Link><div className="mono faint" style={{ fontSize: 12 }}>{short(v.vaultId)}</div></td>
+                    <td data-label="Status"><span className={view?.config?.paused ? "pill fill" : "pill"}>{view?.config ? (view.config.paused ? "Paused" : "Active") : "—"}</span></td>
+                    <td data-label="Owners" className="mono">{view?.config ? `${view.config.threshold} of ${view.config.owners.length}` : "—"}</td>
+                    <td data-label="Treasury" className="num">{view ? `${ada(view.treasuryLovelace)} ADA` : "—"}</td>
+                    <td data-label="Agents" className="num">{view ? view.allowances.length : "—"}</td>
+                    <td className="num act"><Link to={`/v/${v.policy}`} className="btn">Open</Link></td>
                   </tr>
                 ))}
               </tbody>

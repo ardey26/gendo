@@ -130,3 +130,16 @@ select:hover{border-color:#8f8578}
 @media (prefers-reduced-motion: reduce){.side{transition:none}}
 /* Side by side, the open vault's card in the sidebar holds its pages: the page's own tabs are for phones. */
 @media (min-width:800px){.vtabs{display:none}}
+/* On a phone a wide table becomes a stack of cards: each row a card, each cell its label over its value. */
+@media (max-width:799px){
+  .t.cards{min-width:0!important;border:0!important}
+  .t.cards thead{display:none}
+  .t.cards,.t.cards tbody{display:block}
+  .t.cards tr{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin:10px;padding:12px;border:1px solid #2a241e;border-radius:8px;background:#15120f}
+  .t.cards tbody tr:hover td{background:none}
+  .t.cards td{display:block;padding:0;border:0;min-width:0!important;max-width:none!important;white-space:normal!important;text-align:left}
+  .t.cards td[data-label]::before{content:attr(data-label);display:block;margin-bottom:2px;font-size:12px;color:#8f8578;font-weight:400}
+  .t.cards td.lead,.t.cards td.wide,.t.cards td.act,.t.cards td[colspan]{grid-column:1/-1}
+  .t.cards td.act .btn{width:100%;justify-content:center;box-sizing:border-box}
+  .t.cards tr:has(td[colspan]){display:block;border-style:dashed;background:none}
+}

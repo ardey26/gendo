@@ -87,7 +87,7 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
           <section className="panel">
             <div className="ph"><h2>Agents</h2><div style={{ display: "flex", gap: 8 }}><Link to={`/v/${policy}/agents/new`} className="btn">Add by agent key</Link><Link to={`/v/${policy}/connect`} className="btn pri">Connect an agent</Link></div></div>
             <div className="scroll">
-              <table className="t" style={{ minWidth: 900 }}>
+              <table className="t cards" style={{ minWidth: 900 }}>
                 <thead><tr><th>Agent</th><th>Status</th><th>Spent / budget</th><th>Per payment</th><th>Payees</th><th>Expires</th><th /></tr></thead>
                 <tbody>
                   {view.allowances.length === 0 && <tr><td colSpan={7} className="muted">No agents yet.</td></tr>}
@@ -96,17 +96,17 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
                     const pct = l && l.perPeriod > 0n ? Number((l.spentThisPeriod * 100n) / l.perPeriod) : 0;
                     return (
                       <tr key={a.unit}>
-                        <td><div style={{ fontWeight: 700 }}>{data.data!.labels[a.unit] ?? `agent ${short(a.unit.slice(56))}`}</div><div className="faint" style={{ fontSize: 12, maxWidth: 360 }}>{allowanceSentence(a)}</div>{(() => {
+                        <td className="lead"><div style={{ fontWeight: 700 }}>{data.data!.labels[a.unit] ?? `agent ${short(a.unit.slice(56))}`}</div><div className="faint" style={{ fontSize: 12, maxWidth: 360 }}>{allowanceSentence(a)}</div>{(() => {
                           const vs = data.data!.versions;
                           const n = vs ? versionNote(vs.agents[a.unit]?.version, vs) : undefined;
                           return n && <div style={{ fontSize: 12, marginTop: 2, color: n.tone === "required" ? "#e0452b" : n.tone === "update" ? "#d9b24a" : "#8f8578" }}>{n.text}</div>;
                         })()}</td>
-                        <td><span className="pill">{a.status === "active" && cfg?.paused ? "paused" : a.status}</span></td>
-                        <td style={{ minWidth: 170 }}>{l ? <><div className="mono">{ada(l.spentThisPeriod)} / {ada(l.perPeriod)} ADA</div><div className="bar"><i style={{ width: `${Math.min(100, pct)}%` }} /></div></> : "—"}</td>
-                        <td className="mono">{l ? `${ada(l.perPayment)} ADA` : "—"}</td>
-                        <td className="mono">{a.payees.length}</td>
-                        <td className="mono">{a.expiresAt ? new Date(a.expiresAt).toISOString().slice(0, 10) : "—"}</td>
-                        <td><Link to={`/v/${policy}/agents/${a.unit}`} className="btn">Edit</Link></td>
+                        <td data-label="Status"><span className="pill">{a.status === "active" && cfg?.paused ? "paused" : a.status}</span></td>
+                        <td data-label="Spent / budget" style={{ minWidth: 170 }}>{l ? <><div className="mono">{ada(l.spentThisPeriod)} / {ada(l.perPeriod)} ADA</div><div className="bar"><i style={{ width: `${Math.min(100, pct)}%` }} /></div></> : "—"}</td>
+                        <td data-label="Per payment" className="mono">{l ? `${ada(l.perPayment)} ADA` : "—"}</td>
+                        <td data-label="Payees" className="mono">{a.payees.length}</td>
+                        <td data-label="Expires" className="mono">{a.expiresAt ? new Date(a.expiresAt).toISOString().slice(0, 10) : "—"}</td>
+                        <td className="act"><Link to={`/v/${policy}/agents/${a.unit}`} className="btn">Edit</Link></td>
                       </tr>
                     );
                   })}
@@ -160,12 +160,12 @@ function Activity({ policy, quiet }: { policy: string; quiet: boolean }) {
     <section className="panel">
       <div className="ph"><h2>Activity</h2><span className="cap">recent, current agents</span></div>
       <div className="scroll">
-        <table className="t" style={{ minWidth: 760 }}>
+        <table className="t cards" style={{ minWidth: 760 }}>
           <thead><tr><th>Time</th><th>What happened</th><th>Agent's note (not verified)</th><th>Ref</th></tr></thead>
           <tbody>
             {(rows.data ?? []).length === 0 && <tr><td colSpan={4} className="muted">{rows.loading ? (quiet ? "Reading the chain…" : <Spinner label="Reading the chain…" />) : "No activity yet."}</td></tr>}
             {(rows.data ?? []).map((p) => (
-              <tr key={p.txHash}><td className="mono faint">{new Date(p.time).toISOString().replace("T", " ").slice(0, 16)}</td><td>{paymentLine(p)}.</td><td>{p.purpose ? cleanPurpose(p.purpose) : "—"}</td><td className="faint">tx <Chain value={p.txHash} network={o.net} label={short(p.txHash)} /></td></tr>
+              <tr key={p.txHash}><td className="mono faint lead">{new Date(p.time).toISOString().replace("T", " ").slice(0, 16)}</td><td className="lead">{paymentLine(p)}.</td><td data-label="Agent's note (not verified)">{p.purpose ? cleanPurpose(p.purpose) : "—"}</td><td data-label="Ref" className="faint">tx <Chain value={p.txHash} network={o.net} label={short(p.txHash)} /></td></tr>
             ))}
           </tbody>
         </table>

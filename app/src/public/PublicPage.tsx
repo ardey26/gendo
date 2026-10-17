@@ -103,7 +103,7 @@ export function PublicPage({ policy, network }: { policy: string; network: ReadN
             <p style={{ padding: "10px 14px", margin: 0 }}>No agents yet.</p>
           ) : (
             <div className="scroll">
-              <table className="t" style={{ minWidth: 900 }}>
+              <table className="t cards" style={{ minWidth: 900 }}>
                 <thead><tr><th>Agent</th><th>Allowance</th><th>Spent this period</th><th>Resets</th><th>Expires</th></tr></thead>
                 <tbody>
                   {vault.allowances.map((a) => {
@@ -112,12 +112,12 @@ export function PublicPage({ policy, network }: { policy: string; network: ReadN
                     const status = a.status === "active" && cfg?.paused ? "paused" : a.status;
                     return (
                       <tr key={a.unit}>
-                        <td style={{ whiteSpace: "nowrap" }}><div className="mono" style={{ fontWeight: 500 }}>{s.labels[a.unit] ?? short(a.unit.slice(56))}</div><div className="faint" style={{ fontSize: 12 }}>{status}</div></td>
-                        <td style={{ maxWidth: 420 }}>
+                        <td className="lead" style={{ whiteSpace: "nowrap" }}><div className="mono" style={{ fontWeight: 500 }}>{s.labels[a.unit] ?? short(a.unit.slice(56))}</div><div className="faint" style={{ fontSize: 12 }}>{status}</div></td>
+                        <td data-label="Allowance" className="wide" style={{ maxWidth: 420 }}>
                           <div>{allowanceSentence(a)}</div>
                           <div className="mono faint" style={{ fontSize: 12, marginTop: 6, display: "flex", flexWrap: "wrap", gap: 8 }}>{a.payees.map((x) => <Chain key={x} value={x} network={network} label={short(x)} />)}</div>
                         </td>
-                        <td style={{ minWidth: 180 }}>
+                        <td data-label="Spent this period" className="wide" style={{ minWidth: 180 }}>
                           {l && a.status === "active" ? (
                             <>
                               <div className="mono" style={{ marginBottom: 6 }}>{ada(l.spentThisPeriod)} of {ada(l.perPeriod)} ADA spent, {ada(l.leftThisPeriod)} ADA left this period</div>
@@ -125,8 +125,8 @@ export function PublicPage({ policy, network }: { policy: string; network: ReadN
                             </>
                           ) : "—"}
                         </td>
-                        <td className="mono" style={{ whiteSpace: "nowrap" }}>{a.periodEndsAt && a.status === "active" ? when(a.periodEndsAt) : "—"}</td>
-                        <td className="mono" style={{ whiteSpace: "nowrap" }}>{a.expiresAt ? new Date(a.expiresAt).toISOString().slice(0, 10) : "—"}</td>
+                        <td data-label="Resets" className="mono" style={{ whiteSpace: "nowrap" }}>{a.periodEndsAt && a.status === "active" ? when(a.periodEndsAt) : "—"}</td>
+                        <td data-label="Expires" className="mono" style={{ whiteSpace: "nowrap" }}>{a.expiresAt ? new Date(a.expiresAt).toISOString().slice(0, 10) : "—"}</td>
                       </tr>
                     );
                   })}
@@ -141,15 +141,15 @@ export function PublicPage({ policy, network }: { policy: string; network: ReadN
             <p style={{ padding: "10px 14px", margin: 0 }}>No payments yet.</p>
           ) : (
             <div className="scroll">
-              <table className="t" style={{ minWidth: 900 }}>
+              <table className="t cards" style={{ minWidth: 900 }}>
                 <thead><tr><th>Date</th><th>What happened</th><th>Payees</th><th>Agent's note</th></tr></thead>
                 <tbody>
                   {history.map((p) => (
                     <tr key={p.txHash + p.unit}>
-                      <td className="mono faint" style={{ whiteSpace: "nowrap" }}><Chain value={p.txHash} network={network} label={new Date(p.time).toISOString().slice(0, 10)} /></td>
-                      <td>{s.labels[p.unit] ? `${s.labels[p.unit]}: ` : ""}{paymentLine(p)}.</td>
-                      <td className="mono" style={{ whiteSpace: "nowrap" }}>{p.payees.length ? p.payees.map((x, i) => <span key={i}>{i > 0 && ", "}<Chain value={x.address} network={network} label={short(x.address)} /></span>) : "—"}</td>
-                      <td>{p.purpose && cleanPurpose(p.purpose) ? <span>The agent's note (not verified): {cleanPurpose(p.purpose)}</span> : "—"}</td>
+                      <td className="mono faint lead" style={{ whiteSpace: "nowrap" }}><Chain value={p.txHash} network={network} label={new Date(p.time).toISOString().slice(0, 10)} /></td>
+                      <td className="lead">{s.labels[p.unit] ? `${s.labels[p.unit]}: ` : ""}{paymentLine(p)}.</td>
+                      <td data-label="Payees" className="mono wide" style={{ whiteSpace: "nowrap" }}>{p.payees.length ? p.payees.map((x, i) => <span key={i}>{i > 0 && ", "}<Chain value={x.address} network={network} label={short(x.address)} /></span>) : "—"}</td>
+                      <td data-label="Agent's note" className="wide">{p.purpose && cleanPurpose(p.purpose) ? <span>The agent's note (not verified): {cleanPurpose(p.purpose)}</span> : "—"}</td>
                     </tr>
                   ))}
                 </tbody>

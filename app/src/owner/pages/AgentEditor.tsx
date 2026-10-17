@@ -184,8 +184,8 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
             <div className="ph"><span className="cap">In plain words</span></div>
             <div style={{ padding: 14 }}>{live}</div>
             {d?.al && next && (
-              <table className="t"><thead><tr><th>Rule</th><th>On-chain now</th><th>After signing</th></tr></thead><tbody>
-                <tr><td>Sentence</td><td>{sentence(d.al, d.al.destinations.length)}</td><td style={{ color: "#e0452b" }}>{sentence(next, next.destinations.length)}</td></tr>
+              <table className="t cards"><thead><tr><th>Rule</th><th>On-chain now</th><th>After signing</th></tr></thead><tbody>
+                <tr><td className="lead">Sentence</td><td data-label="On-chain now" className="wide">{sentence(d.al, d.al.destinations.length)}</td><td data-label="After signing" className="wide" style={{ color: "#e0452b" }}>{sentence(next, next.destinations.length)}</td></tr>
               </tbody></table>
             )}
             <div style={{ padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 8 }}>

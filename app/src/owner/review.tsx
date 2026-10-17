@@ -49,14 +49,14 @@ export function DetailView({ detail, verified, network }: { detail: Detail; veri
       {detail.warnings.map((w) => <ErrorNote key={w} error={`Careful: ${w}.`} />)}
       {detail.rows.length > 0 && (
         <div className="scroll">
-          <table className="t" style={{ border: "1px solid #2a241e", borderRadius: 8, borderCollapse: "separate", borderSpacing: 0 }}>
+          <table className="t cards" style={{ border: "1px solid #2a241e", borderRadius: 8, borderCollapse: "separate", borderSpacing: 0 }}>
             <thead><tr><th>{req ? "Field" : "Rule"}</th><th>{req ? "Value" : "On-chain now"}</th><th>{req ? "Against limit" : "After signing"}</th></tr></thead>
             <tbody>
               {detail.rows.map((r, i) => (
                 <tr key={i}>
-                  <td>{r.k}</td>
-                  <td className="mono" style={{ wordBreak: "break-all", color: r.changed && !req ? "#8f8578" : undefined, textDecoration: r.changed && !req ? "line-through" : undefined }}>{r.now ? <Chain value={r.now} network={network} /> : "—"}</td>
-                  <td className="mono" style={{ wordBreak: "break-all", color: r.changed ? "#e0452b" : "#b9afa0", fontWeight: r.changed ? 500 : 400 }}>{r.next ? <Chain value={r.next} network={network} /> : "—"}</td>
+                  <td className="lead">{r.k}</td>
+                  <td data-label={req ? "Value" : "On-chain now"} className="mono wide" style={{ wordBreak: "break-all", color: r.changed && !req ? "#8f8578" : undefined, textDecoration: r.changed && !req ? "line-through" : undefined }}>{r.now ? <Chain value={r.now} network={network} /> : "—"}</td>
+                  <td data-label={req ? "Against limit" : "After signing"} className="mono wide" style={{ wordBreak: "break-all", color: r.changed ? "#e0452b" : "#b9afa0", fontWeight: r.changed ? 500 : 400 }}>{r.next ? <Chain value={r.next} network={network} /> : "—"}</td>
                 </tr>
               ))}
             </tbody>
