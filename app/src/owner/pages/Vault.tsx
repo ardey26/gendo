@@ -74,7 +74,7 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
     >
       {review.panel}
       {cfg?.paused && <div className="banner">All agents are paused. No agent can pay. Unpausing needs {String(cfg.threshold)} of {cfg.owners.length} owners.</div>}
-      <div className="tabs" role="tablist">
+      <div className="tabs vtabs" role="tablist">
         {(["agents", "activity", "treasury", "settings"] as const).map((t) => (
           <button key={t} type="button" role="tab" aria-selected={t === tab} className={t === tab ? "tab on" : "tab"} onClick={() => navigate(`/v/${policy}/${t}`)}>{t[0]!.toUpperCase() + t.slice(1)}</button>
         ))}

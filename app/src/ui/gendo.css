@@ -128,3 +128,5 @@ select:hover{border-color:#8f8578}
   .top{padding:10px 16px}
 }
 @media (prefers-reduced-motion: reduce){.side{transition:none}}
+/* Side by side, the open vault's card in the sidebar holds its pages: the page's own tabs are for phones. */
+@media (min-width:800px){.vtabs{display:none}}
