@@ -143,3 +143,43 @@ select:hover{border-color:#8f8578}
   .t.cards td.act .btn{width:100%;justify-content:center;box-sizing:border-box}
   .t.cards tr:has(td[colspan]){display:block;border-style:dashed;background:none}
 }
+/* The public vault page: a calm, readable proof page. */
+.pub{max-width:1120px;margin:0 auto;padding:28px 20px 48px;display:flex;flex-direction:column;gap:28px;box-sizing:border-box}
+.pub-hero{display:flex;flex-direction:column;gap:10px;padding:24px;border:1px solid #2a241e;border-radius:14px;background:radial-gradient(120% 140% at 0% 0%,#1d1712 0%,#120e0b 55%);position:relative;overflow:hidden}
+.pub-hero::after{content:"限度";position:absolute;right:18px;top:6px;font-family:"Shippori Mincho B1","Hiragino Mincho ProN",serif;font-weight:800;font-size:96px;line-height:1;writing-mode:vertical-rl;color:#efe7d8;opacity:.035;pointer-events:none}
+.pub-hero h1{margin:0;font-size:32px;font-weight:900;letter-spacing:-.02em;line-height:1.1}
+.pub-hero p{margin:0;max-width:640px;font-size:15px}
+.pub-status{display:inline-flex;align-items:center;gap:7px;padding:3px 10px;border-radius:999px;border:1px solid #3a332b;font-size:12px;color:#efe7d8}
+.pub-status i{width:7px;height:7px;border-radius:50%;background:#efe7d8;box-shadow:0 0 0 3px rgba(239,231,216,.12)}
+.pub-status.off{border-color:#e0452b;color:#e0452b}.pub-status.off i{background:#e0452b;box-shadow:0 0 0 3px rgba(224,69,43,.18)}
+.pub-proof{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;margin-top:6px;padding-top:12px;border-top:1px dashed #2a241e;font-size:12px}
+.pub-id{display:inline-flex;align-items:center;gap:8px}
+.pub-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:12px}
+.pub-stats>div{display:flex;flex-direction:column;gap:4px;padding:16px;border:1px solid #2a241e;border-radius:12px;background:#120e0b}
+.pub-stats b{font-size:28px;font-weight:800;letter-spacing:-.01em;line-height:1.1}
+.pub-stats small,.pub-amt small{font-size:13px;font-weight:500;color:#8f8578}
+.pub-stats .faint{font-size:12px}
+.pub-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.pub-h h2{margin:0;font-size:18px;font-weight:800}
+.pub-empty{padding:18px;border:1px dashed #2a241e;border-radius:12px;color:#8f8578}
+.pub-agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:12px}
+.pub-agent{display:flex;flex-direction:column;gap:14px;padding:16px;border:1px solid #2a241e;border-radius:12px;background:#120e0b}
+.pub-agent header{display:flex;align-items:center;gap:12px}
+.pub-tile{display:inline-flex;width:36px;height:36px;border-radius:8px;align-items:center;justify-content:center;flex-shrink:0;background:#1f1a15;border:1px solid #3a332b;color:#efe7d8;font-weight:800}
+.pub-tile.sm{width:28px;height:28px;border-radius:6px;font-size:12px}
+.pub-budget{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:10px;background:#0d0b09;box-shadow:inset 0 1px 3px rgba(0,0,0,.6)}
+.pub-rules{display:flex;flex-wrap:wrap;gap:6px}
+.pub-rules span{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid #3a332b;color:#b9afa0;white-space:nowrap}
+.pub-payees{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:12px}
+.pub-feed{list-style:none;margin:0;padding:0;border:1px solid #2a241e;border-radius:12px;background:#120e0b;overflow:hidden}
+.pub-feed li{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-bottom:1px solid #2a241e}
+.pub-feed li:last-child{border-bottom:0}
+.pub-feed li.quiet{color:#b9afa0}
+.pub-feed li.quiet .pub-tile{color:#8f8578;background:transparent;border-style:dashed}
+.pub-note{font-size:13px;color:#b9afa0;border-left:2px solid #3a332b;padding-left:8px}
+.pub-amt{font-size:16px;white-space:nowrap}
+.pub-owners{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));gap:10px}
+.pub-owners>div{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #2a241e;border-radius:12px;background:#120e0b;font-size:13px}
+.pub-how{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:12px;padding-top:20px;border-top:1px solid #2a241e}
+.pub-how>div{display:flex;flex-direction:column;gap:4px;font-size:13px}
+@media (max-width:640px){.pub-path{display:none}.pub{padding:16px 16px 40px;gap:22px}.pub-hero{padding:18px}.pub-hero h1{font-size:26px}.pub-hero::after{font-size:64px}.pub-stats{grid-template-columns:1fr 1fr}.pub-stats b{font-size:22px}.pub-feed li{flex-wrap:wrap}.pub-amt{margin-left:40px}}

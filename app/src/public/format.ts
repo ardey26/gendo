@@ -41,3 +41,14 @@ export function cleanPurpose(s: string): string {
   const t = s.replace(/\p{Cc}/gu, " ").replace(/\p{Cf}/gu, "").replace(/\s+/g, " ").trim();
   return t.length > 120 ? t.slice(0, 120) + "…" : t;
 }
+
+/** How far off `ms` is from `now`, in the one unit a person reads at a glance. */
+export function fromNow(ms: number, now: number): string {
+  const d = ms - now;
+  if (d <= 0) return "now";
+  if (d < 60_000) return "in under a minute";
+  if (d < 3_600_000) return `in ${Math.floor(d / 60_000)} min`;
+  if (d < 86_400_000) return `in ${Math.floor(d / 3_600_000)} h`;
+  const days = Math.floor(d / 86_400_000);
+  return `in ${days} ${days === 1 ? "day" : "days"}`;
+}

@@ -1,6 +1,6 @@
 // app/test/format.test.ts
 import { describe, expect, it } from "vitest";
-import { ada, allowanceSentence, cleanPurpose, parsePolicy, paymentLine, periodName } from "../src/public/format.ts";
+import { ada, allowanceSentence, cleanPurpose, fromNow, parsePolicy, paymentLine, periodName } from "../src/public/format.ts";
 
 describe("format", () => {
   it("parses /w/<policy> and rejects anything else", () => {
@@ -36,5 +36,14 @@ describe("format", () => {
   it("cleans the agent's note: no control or direction characters, bounded length", () => {
     expect(cleanPurpose("hosting\u202e, October\n\u0000 ")).toBe("hosting, October");
     expect(cleanPurpose("x".repeat(500))).toBe("x".repeat(120) + "…");
+  });
+  it("says how far off a time is, roughly", () => {
+    const now = 1_000_000_000_000;
+    expect(fromNow(now + 40_000, now)).toBe("in under a minute");
+    expect(fromNow(now + 5 * 60_000, now)).toBe("in 5 min");
+    expect(fromNow(now + 15 * 3_600_000 + 20 * 60_000, now)).toBe("in 15 h");
+    expect(fromNow(now + 3 * 86_400_000 + 3_600_000, now)).toBe("in 3 days");
+    expect(fromNow(now + 86_400_000, now)).toBe("in 1 day");
+    expect(fromNow(now - 1, now)).toBe("now");
   });
 });

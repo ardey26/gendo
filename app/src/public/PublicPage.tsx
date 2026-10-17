@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { allowanceHistory, readVault, type Get, type PaymentView, type ReadNetwork, type VaultView } from "../../../sdk/src/read/index.ts";
 import { Chain, Mark, Netband, Spinner } from "../ui/Brand.tsx";
-import { ada, allowanceSentence, cleanPurpose, paymentLine } from "./format.ts";
+import { ada, allowanceSentence, cleanPurpose, fromNow, paymentLine, periodName } from "./format.ts";
 
 const get: Get = async (path) => {
   let r: Response;
@@ -55,8 +55,8 @@ export function PublicPage({ policy, network }: { policy: string; network: ReadN
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <Mark />
           <span style={{ fontWeight: 900, fontSize: 15 }}>gendo</span>
-          <span className="faint">/</span>
-          <span className="mono" style={{ fontSize: 13 }}>w/{short(policy)}</span>
+          <span className="faint pub-path">/</span>
+          <span className="mono pub-path" style={{ fontSize: 13 }}>w/{short(policy)}</span>
         </div>
         <a className="btn pri" href="/">Connect wallet</a>
       </header>
@@ -72,97 +72,141 @@ export function PublicPage({ policy, network }: { policy: string; network: ReadN
   const week = history.filter((p) => p.time > s.tipMs - 7 * 86_400_000 && (p.kind === "agent" || p.kind === "co-signed"));
   const paidWeek = week.reduce((n, p) => n + p.payees.reduce((m, x) => m + x.lovelace, 0n), 0n);
   const active = vault.allowances.filter((a) => a.status === "active").length;
+  const nameOf = (unit: string) => s.labels[unit] ?? `Agent ${short(unit.slice(56))}`;
+  const copyId = () => { void navigator.clipboard?.writeText(policy); setCopied(true); setTimeout(() => setCopied(false), 1500); };
   return frame(
     <>
       {cfg?.paused && <div className="banner">Paused. No agent can pay until {String(cfg.threshold)} of {cfg.owners.length} owners unpause.</div>}
-      <main style={{ maxWidth: 1240, margin: "0 auto", padding: 20, display: "flex", flexDirection: "column", gap: 16, boxSizing: "border-box" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900, letterSpacing: "-0.02em" }}>{s.name ?? "A gendo vault"}</h1>
-          <span className={cfg?.paused ? "pill fill" : "pill"}>{cfg ? (cfg.paused ? "Paused" : "Active") : "Config unreadable"}</span>
-        </div>
-        <section className="panel">
-          <div className="kv">
-            <div><span className="cap">Owners</span><span>{cfg ? `${cfg.threshold} of ${cfg.owners.length} must sign` : "—"}</span></div>
-            <div><span className="cap">Treasury</span><span className="mono">{ada(vault.treasuryLovelace)} ADA</span></div>
-            <div><span className="cap">Agents</span><span>{active} active</span></div>
-            <div><span className="cap">Paid, last 7 days</span><span className="mono">{ada(paidWeek)} ADA in {week.length} payments</span></div>
-            <div>
-              <span className="cap">Vault id</span>
-              <span className="mono" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {short(policy)}
-                <button type="button" className="btn" style={{ padding: "2px 8px", minHeight: 24, fontSize: 12 }} onClick={() => { void navigator.clipboard?.writeText(policy); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
-                  {copied ? "Copied" : "Copy"}
-                </button>
-              </span>
-            </div>
+      <main className="pub">
+        <section className="pub-hero">
+          <span className="cap">Agent vault on Cardano</span>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+            <h1>{s.name ?? "A gendo vault"}</h1>
+            <span className={cfg?.paused ? "pub-status off" : "pub-status"}><i aria-hidden="true" />{cfg ? (cfg.paused ? "Paused" : "Active") : "Config unreadable"}</span>
+          </div>
+          <p className="muted">
+            {active === 0 ? "No agent can spend from it right now." : `${active === 1 ? "One agent can" : `${active} agents can`} pay from it, only inside the limits below.`} The limits live in the vault's code on chain: no one, gendo included, can stretch them.
+          </p>
+          <div className="pub-proof">
+            <span className="faint">Read from the chain at {when(s.tipMs)}</span>
+            <span className="pub-id">
+              <span className="faint">Vault id</span>
+              <span className="mono">{short(policy)}</span>
+              <button type="button" className="btn" style={{ padding: "2px 8px", minHeight: 24, fontSize: 12 }} onClick={copyId}>{copied ? "Copied" : "Copy"}</button>
+            </span>
+            <span className="faint">Address <Chain value={vault.address} network={network} label={short(vault.address)} /></span>
           </div>
         </section>
-        <section className="panel">
-          <div className="ph"><h2>Agents</h2></div>
+
+        <section className="pub-stats" aria-label="Summary">
+          <div><span className="cap">Treasury</span><b className="mono">{ada(vault.treasuryLovelace)}<small> ADA</small></b><span className="faint">held by the vault</span></div>
+          <div><span className="cap">Agents</span><b className="mono">{active}<small> active</small></b><span className="faint">{vault.allowances.length} in total</span></div>
+          <div><span className="cap">Paid, last 7 days</span><b className="mono">{ada(paidWeek)}<small> ADA</small></b><span className="faint">in {week.length} {week.length === 1 ? "payment" : "payments"}</span></div>
+          <div>
+            <span className="cap">Owners</span>
+            <b className="mono">{cfg ? <>{cfg.owners.length}<small> {cfg.owners.length === 1 ? "owner" : "owners"}</small></> : "—"}</b>
+            <span className="faint">{cfg ? `${cfg.threshold} of ${cfg.owners.length} must sign` : "unreadable"}</span>
+          </div>
+        </section>
+
+        <section>
+          <div className="pub-h"><h2>Agents</h2><span className="cap">what each one may spend</span></div>
           {vault.allowances.length === 0 ? (
-            <p style={{ padding: "10px 14px", margin: 0 }}>No agents yet.</p>
+            <div className="pub-empty">No agents yet.</div>
           ) : (
-            <div className="scroll">
-              <table className="t cards" style={{ minWidth: 900 }}>
-                <thead><tr><th>Agent</th><th>Allowance</th><th>Spent this period</th><th>Resets</th><th>Expires</th></tr></thead>
-                <tbody>
-                  {vault.allowances.map((a) => {
-                    const l = a.caps.find((c) => c.unit === "lovelace");
-                    const pct = l && l.perPeriod > 0n ? Number((l.spentThisPeriod * 100n) / l.perPeriod) : 0;
-                    const status = a.status === "active" && cfg?.paused ? "paused" : a.status;
-                    return (
-                      <tr key={a.unit}>
-                        <td className="lead" style={{ whiteSpace: "nowrap" }}><div className="mono" style={{ fontWeight: 500 }}>{s.labels[a.unit] ?? short(a.unit.slice(56))}</div><div className="faint" style={{ fontSize: 12 }}>{status}</div></td>
-                        <td data-label="Allowance" className="wide" style={{ maxWidth: 420 }}>
-                          <div>{allowanceSentence(a)}</div>
-                          <div className="mono faint" style={{ fontSize: 12, marginTop: 6, display: "flex", flexWrap: "wrap", gap: 8 }}>{a.payees.map((x) => <Chain key={x} value={x} network={network} label={short(x)} />)}</div>
-                        </td>
-                        <td data-label="Spent this period" className="wide" style={{ minWidth: 180 }}>
-                          {l && a.status === "active" ? (
-                            <>
-                              <div className="mono" style={{ marginBottom: 6 }}>{ada(l.spentThisPeriod)} of {ada(l.perPeriod)} ADA spent, {ada(l.leftThisPeriod)} ADA left this period</div>
-                              <div className="bar" role="img" aria-label={`${ada(l.spentThisPeriod)} of ${ada(l.perPeriod)} ADA spent`}><i style={{ width: `${Math.min(100, pct)}%` }} /></div>
-                            </>
-                          ) : "—"}
-                        </td>
-                        <td data-label="Resets" className="mono" style={{ whiteSpace: "nowrap" }}>{a.periodEndsAt && a.status === "active" ? when(a.periodEndsAt) : "—"}</td>
-                        <td data-label="Expires" className="mono" style={{ whiteSpace: "nowrap" }}>{a.expiresAt ? new Date(a.expiresAt).toISOString().slice(0, 10) : "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="pub-agents">
+              {vault.allowances.map((a) => {
+                const l = a.caps.find((c) => c.unit === "lovelace");
+                const pct = l && l.perPeriod > 0n ? Number((l.spentThisPeriod * 100n) / l.perPeriod) : 0;
+                const status = a.status === "active" && cfg?.paused ? "paused" : a.status;
+                const live = a.status === "active";
+                return (
+                  <article key={a.unit} className="pub-agent">
+                    <header>
+                      <span className="pub-tile" aria-hidden="true">{nameOf(a.unit).replace(/^Agent /, "")[0]!.toUpperCase()}</span>
+                      <span style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
+                        <b style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nameOf(a.unit)}</b>
+                        <span className={status === "active" ? "faint" : "pill fill"} style={{ fontSize: 12 }}>{status}</span>
+                      </span>
+                      {a.expiresAt && <span className="faint" style={{ fontSize: 12, textAlign: "right" }}>Expires<br /><span className="mono">{new Date(a.expiresAt).toISOString().slice(0, 10)}</span></span>}
+                    </header>
+                    {l && live ? (
+                      <div className="pub-budget">
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                          <span><b className="mono" style={{ fontSize: 22 }}>{ada(l.spentThisPeriod)}</b><span className="faint mono"> / {ada(l.perPeriod)} ADA</span></span>
+                          <span className="faint" style={{ fontSize: 12 }}>spent this {periodName(a.periodMs!)}</span>
+                        </div>
+                        <div className="bar" role="img" aria-label={`${ada(l.spentThisPeriod)} of ${ada(l.perPeriod)} ADA spent`}><i style={{ width: `${Math.min(100, pct)}%` }} /></div>
+                        <span className="faint" style={{ fontSize: 12 }}>{ada(l.leftThisPeriod)} ADA left{a.periodEndsAt ? `, resets ${fromNow(a.periodEndsAt, s.tipMs)}` : ""}</span>
+                      </div>
+                    ) : null}
+                    {l && (
+                      <div className="pub-rules">
+                        <span>Up to {ada(l.perPayment)} ADA a payment</span>
+                        <span>{ada(l.perPeriod)} ADA a {periodName(a.periodMs!)}</span>
+                        <span>{a.payees.length} approved {a.payees.length === 1 ? "payee" : "payees"}</span>
+                      </div>
+                    )}
+                    <p className="faint" style={{ margin: 0, fontSize: 13 }}>{allowanceSentence(a)}</p>
+                    {a.payees.length > 0 && (
+                      <div className="pub-payees">
+                        <span className="cap">Can pay</span>
+                        {a.payees.map((x) => <Chain key={x} value={x} network={network} label={short(x)} />)}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
-        <section className="panel">
-          <div className="ph"><h2>Payments</h2><span className="cap">recent, current agents</span></div>
+
+        <section>
+          <div className="pub-h"><h2>Payments</h2><span className="cap">recent, current agents</span></div>
           {history.length === 0 ? (
-            <p style={{ padding: "10px 14px", margin: 0 }}>No payments yet.</p>
+            <div className="pub-empty">No payments yet.</div>
           ) : (
-            <div className="scroll">
-              <table className="t cards" style={{ minWidth: 900 }}>
-                <thead><tr><th>Date</th><th>What happened</th><th>Payees</th><th>Agent's note</th></tr></thead>
-                <tbody>
-                  {history.map((p) => (
-                    <tr key={p.txHash + p.unit}>
-                      <td className="mono faint lead" style={{ whiteSpace: "nowrap" }}><Chain value={p.txHash} network={network} label={new Date(p.time).toISOString().slice(0, 10)} /></td>
-                      <td className="lead">{s.labels[p.unit] ? `${s.labels[p.unit]}: ` : ""}{paymentLine(p)}.</td>
-                      <td data-label="Payees" className="mono wide" style={{ whiteSpace: "nowrap" }}>{p.payees.length ? p.payees.map((x, i) => <span key={i}>{i > 0 && ", "}<Chain value={x.address} network={network} label={short(x.address)} /></span>) : "—"}</td>
-                      <td data-label="Agent's note" className="wide">{p.purpose && cleanPurpose(p.purpose) ? <span>The agent's note (not verified): {cleanPurpose(p.purpose)}</span> : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ol className="pub-feed">
+              {history.map((p) => {
+                const paid = p.payees.reduce((n, x) => n + x.lovelace, 0n);
+                const spend = p.kind === "agent" || p.kind === "co-signed";
+                const note = p.purpose ? cleanPurpose(p.purpose) : "";
+                return (
+                  <li key={p.txHash + p.unit} className={spend ? "" : "quiet"}>
+                    <span className="pub-tile sm" aria-hidden="true">{spend ? (s.labels[p.unit] ?? "A")[0]!.toUpperCase() : "印"}</span>
+                    <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+                      <span>{s.labels[p.unit] ? <b>{s.labels[p.unit]}: </b> : ""}{paymentLine(p)}.</span>
+                      {note && <span className="pub-note">The agent's note (not verified): {note}</span>}
+                      <span className="faint" style={{ fontSize: 12, display: "flex", flexWrap: "wrap", gap: "2px 10px" }}>
+                        <span className="mono">{when(p.time)}</span>
+                        {p.payees.map((x, i) => <span key={i}>to <Chain value={x.address} network={network} label={short(x.address)} /></span>)}
+                        <span>tx <Chain value={p.txHash} network={network} label={short(p.txHash)} /></span>
+                      </span>
+                    </div>
+                    {spend && <b className="mono pub-amt">−{ada(paid)}<small> ADA</small></b>}
+                  </li>
+                );
+              })}
+            </ol>
           )}
         </section>
+
         {cfg && (
-          <section className="panel">
-            <div className="ph"><h2>Owners</h2><span className="cap">{String(cfg.threshold)} of {cfg.owners.length}</span></div>
-            <table className="t"><tbody>{cfg.owners.map((o) => <tr key={o}><td className="mono">key {short(o)}</td></tr>)}</tbody></table>
+          <section>
+            <div className="pub-h"><h2>Owners</h2><span className="cap">{String(cfg.threshold)} of {cfg.owners.length} sign every change</span></div>
+            <div className="pub-owners">
+              {cfg.owners.map((o) => (
+                <div key={o}><span className="stamp" aria-hidden="true">印</span><span className="mono">key {short(o)}</span></div>
+              ))}
+            </div>
           </section>
         )}
+
+        <section className="pub-how">
+          <div><b>The limits are code</b><span className="faint">Each agent's caps, payees and expiry are checked by the vault's script on every payment. A payment that breaks them can't land.</span></div>
+          <div><b>Notes aren't proof</b><span className="faint">What an agent writes about a payment is its own claim. Amounts, payees and fees above come from the chain.</span></div>
+          <div><b>Check it yourself</b><span className="faint">Every amount links to a public explorer. This page only reads the chain; it can't move anything.</span></div>
+        </section>
       </main>
     </>,
     { "data-ready": "" },
