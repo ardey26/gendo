@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function browser(port) {
   const bin = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  const proc = spawn(bin, ["--headless=new", "--disable-gpu", `--remote-debugging-port=${port}`, `--user-data-dir=/tmp/gendo-e2e-${port}-${process.pid}`, "about:blank"], { stdio: "ignore" });
+  const proc = spawn(bin, ["--headless=new", "--disable-gpu", "--window-size=1280,900", `--remote-debugging-port=${port}`, `--user-data-dir=/tmp/gendo-e2e-${port}-${process.pid}`, "about:blank"], { stdio: "ignore" });
   let target;
   for (let i = 0; i < 50 && !target; i++) {
     try { target = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((t) => t.type === "page"); } catch { await sleep(200); }
