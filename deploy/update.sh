@@ -14,7 +14,9 @@ new=$(as git rev-parse origin/master)
 as git checkout -q --detach "$new"
 install -m 644 deploy/gendo.service deploy/gendo-deploy.service deploy/gendo-deploy.timer /etc/systemd/system/
 systemctl daemon-reload
-for d in sdk server app; do as npm ci --prefix "$d" --no-audit --no-fund --loglevel=error; done
+for d in sdk server app mcp; do as npm ci --prefix "$d" --no-audit --no-fund --loglevel=error; done
+# gendo-agent's install files (Claude Desktop bundle, npm tarball), served from /dl with the app.
+as gendo-agent/pack.sh app/public/dl >/dev/null
 rm -rf app/dist-next
 as env VITE_NETWORK=Preprod npm run build --prefix app --silent -- --outDir dist-next --emptyOutDir
 # Keep earlier builds' files for a week: a tab opened before this deploy still loads the

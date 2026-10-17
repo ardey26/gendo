@@ -8,3 +8,4 @@ dist/
 .vault/
 .vault-*/
 .DS_Store
+app/public/dl/

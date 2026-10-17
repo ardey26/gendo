@@ -12,8 +12,8 @@ Think of it as a company card for an AI agent. A team of owners holds the money 
 | Who | Uses | Can |
 |---|---|---|
 | **Owners** (a team of humans, any m of n) | The owner app with a CIP-30 wallet, or the CLI (`cli/vault`); each with their own key | Create the vault, set the limits, approve over-limit payments, pause everything, revoke an allowance |
-| **Agent operator** (a human) | The signer daemon | Holds the agent's key, so the agent never does, and adds its own rate and daily limits |
-| **The agent** (your AI) | The MCP server (`mcp/gendo-mcp`), or the CLI or SDK | Check its budget, pay within it, ask the owners for more. It holds no key and can't change its own limits |
+| **The person running the agent** | `gendo-agent`, installed in their AI app (Claude Desktop, Cursor, LM Studio or any MCP app, local models included); or the signer daemon for a separate-signer setup | Pairs the agent with a code from the owners' app. Its key is made on that machine and never leaves it; the chain caps what it can spend |
+| **The agent** (your AI) | The tools `gendo-agent` gives it (or `mcp/gendo-mcp` with a separate signer, or the CLI or SDK) | Check its budget, pay within it, ask the owners for more. It can't change its own limits |
 | **The chain** (the vault's validator) | — | Rejects any payment outside the limits, whoever builds it |
 
 ### One payment, start to finish
@@ -51,7 +51,13 @@ The name is 限度 (*gendo*), Japanese for a limit, as in 限度額, the spendin
 **Gendo and Masumi.** Masumi is the payment rail and registry: its contracts escrow each payment, and its payment service can cap spend per API key. Those caps are enforced off-chain, by the service that holds the buyer's hot wallet. Gendo is the budget the agent pays from, with the caps enforced on-chain, so they hold even when the agent's key is stolen.
 
 ## Get started
-The full walkthrough, with every command, is in [`skills/gendo/SKILL.md`](skills/gendo/SKILL.md). In short (preprod, after `cd sdk && npm ci && cd ../mcp && npm ci`):
+**Without a terminal** (preprod, at [app.gendo.cash](https://app.gendo.cash)):
+1. **Owners** connect their wallets and create a vault in the app (or add one by its id).
+2. On the vault's Agents tab, an owner clicks **Connect an agent**, names it and gets a pairing code.
+3. **Whoever runs the AI** installs gendo in their app: a double-click file for Claude Desktop, a one-click link for Cursor and LM Studio, or a config block for other MCP apps. The code rides along, or Claude Desktop asks for it once.
+4. The owner checks that the three words the app shows match what the AI reports, then sets the budget; the owners sign it like any change. The agent gets a few ADA in its own address as collateral and can pay as soon as the budget lands.
+
+**With the CLI and a separate signer** (the advanced path, where the key lives in a daemon the AI can't read). The full walkthrough, with every command, is in [`skills/gendo/SKILL.md`](skills/gendo/SKILL.md). In short (preprod, after `cd sdk && npm ci && cd ../mcp && npm ci`):
 1. **Owners**, each on their own machine, run `cli/vault keys gen me` and share only the key hash. One owner runs `vault create` with everyone's hashes, funds the treasury, and builds the allowance grant with `--out`; the others check it with `tx describe` and sign it with `tx witness`. They share the one-line vault id from `vault info`.
 2. **The agent operator** runs `vault join <id>` and `signer start`, ideally as its own OS user.
 3. **Connect the agent** to the MCP server. It holds no key: its home is only joined to the vault.
@@ -391,10 +397,12 @@ Test counts at the time of writing:
 |---|---|
 | On-chain Aiken tests | 210 (196 unit/adversarial, 14 property) |
 | Mutations killed (each by at least one unit test, so no kill depends on a property test's luck) | 85 |
-| SDK unit + emulator tests | 155 |
-| Keyless server (chain proxy, listings, sign-in, inbox, agent requests, vault creation and suggestions, limits) | 57 |
-| App (formatting, routes, what a pending tx does, inbox status and polling, agent form and edit rules, recipes and rebuild matching, vault list, the create form, the early-preview notice, API and wallet errors) | 56 |
+| SDK unit + emulator tests | 161 |
+| Keyless server (chain proxy, listings, sign-in, inbox, agent requests, vault creation and suggestions, pairing, agent status and the submit relay, limits) | 69 |
+| App (formatting, routes, what a pending tx does, inbox status and polling, agent form and edit rules, recipes and rebuild matching, vault list, the create form, the early-preview notice, install links, API and wallet errors) | 60 |
+| `gendo-agent` (its key and state, pairing, tools before the budget lands) | 7 |
 | Owner app end to end (devnet, two owners in two headless browsers, including creating a vault in the app) | 12 checks |
+| Connecting an agent end to end (devnet: a pairing code, `gendo-agent` started over stdio like an AI app starts it, the confirm words, the budget signed by two owners, the agent's first payment through its MCP tool, the public page) | 5 checks |
 | Public page end to end (devnet, headless Chrome) | 8 checks |
 | Approvals through the server (devnet: sign-in, single-owner pause, 2-of-2 unpause, an agent request via MCP, server down and retry) | 8 checks |
 | Adversarial replays (devnet PV10; preprod PV11) | 38 on devnet; 38 on preprod |
@@ -406,7 +414,7 @@ Test counts at the time of writing:
 | LLM agent end-to-end (devnet) | safety checks pass; escalation co-signed |
 | Preprod demo (all links in `demo/RESULTS.md`) | 16 txs, 11 refusals, including two LLM agent runs |
 
-Every devnet suite above has been re-run against the current vault hash, which adds the emergency pause. On preprod, the current hash passed 6/6 double-pay and 37/38 attacks in one run; the 38th (a non-owner pausing) never reached the chain because the test's attacker wallet ran out of ADA, and it passed when rerun with the pause tests after a test funding fix. A single-owner pause built in the browser and signed in Lace has landed on preprod. Creating a vault in the app is tested on the devnet with test wallets; it hasn't been done with a real wallet on preprod yet. The preprod demo (`demo/RESULTS.md`) is from an earlier build.
+Every devnet suite above has been re-run against the current vault hash, which adds the emergency pause. On preprod, the current hash passed 6/6 double-pay and 37/38 attacks in one run; the 38th (a non-owner pausing) never reached the chain because the test's attacker wallet ran out of ADA, and it passed when rerun with the pause tests after a test funding fix. A single-owner pause built in the browser and signed in Lace has landed on preprod. Creating a vault in the app is tested on the devnet with test wallets; it hasn't been done with a real wallet on preprod yet. Connecting an agent is tested end to end on the devnet, and both install files (the Claude Desktop bundle and the npm tarball) were installed and started over MCP on macOS; real installs inside Claude Desktop, Cursor and LM Studio, and Windows, haven't been tried yet. `@gendo-cash/agent` isn't on npm: the app serves its install files from app.gendo.cash/dl. The preprod demo (`demo/RESULTS.md`) is from an earlier build.
 
 ## License
 
