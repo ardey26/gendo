@@ -398,9 +398,9 @@ Test counts at the time of writing:
 | On-chain Aiken tests | 210 (196 unit/adversarial, 14 property) |
 | Mutations killed (each by at least one unit test, so no kill depends on a property test's luck) | 85 |
 | SDK unit + emulator tests | 161 |
-| Keyless server (chain proxy, listings, sign-in, inbox, agent requests, vault creation and suggestions, pairing, agent status and the submit relay, limits) | 69 |
+| Keyless server (chain proxy, listings, sign-in, inbox, agent requests, vault creation and suggestions, pairing, agent status and the submit relay, limits) | 72 |
 | App (formatting, routes, what a pending tx does, inbox status and polling, agent form and edit rules, recipes and rebuild matching, vault list, the create form, the early-preview notice, install links, API and wallet errors) | 60 |
-| `gendo-agent` (its key and state, pairing, tools before the budget lands) | 7 |
+| `gendo-agent` (its key and state, pairing, its own confirm words, token handling, its signer following the allowance and retrying a dropped payment, tools before the budget lands) | 13 |
 | Owner app end to end (devnet, two owners in two headless browsers, including creating a vault in the app) | 12 checks |
 | Connecting an agent end to end (devnet: a pairing code, `gendo-agent` started over stdio like an AI app starts it, the confirm words, the budget signed by two owners, the agent's first payment through its MCP tool, the public page) | 5 checks |
 | Public page end to end (devnet, headless Chrome) | 8 checks |
