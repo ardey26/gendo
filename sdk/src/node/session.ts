@@ -31,6 +31,11 @@ export type AgentSession = {
   refScript?: { txHash: string; outputIndex: number };
 };
 
+/** A session from parts already in hand (gendo-agent: chain through the server, an in-process signer). */
+export function sessionFromParts(p: Omit<AgentSession, "journal">): AgentSession {
+  return { ...p, journal: new FileJournal(join(p.home, "intents.jsonl")) };
+}
+
 /** `home` is a VAULT_HOME joined to the vault (`vault join <id>`); it holds no key. */
 export async function openSession(opts: { home: string; unit: string; signerSocket: string }): Promise<AgentSession> {
   const statePath = join(opts.home, "state.json");
@@ -39,16 +44,15 @@ export async function openSession(opts: { home: string; unit: string; signerSock
   const cfg = providerFromEnv();
   const lucid = await connect(cfg);
   if (state.network !== lucid.config().network) throw new Error(`vault is on ${state.network}, VAULT_NETWORK is ${lucid.config().network}`);
-  return {
+  return sessionFromParts({
     lucid,
     vault: makeVault(lucid.config().network!, state.seed),
     unit: opts.unit,
     home: opts.home,
     q: blockfrostQuery(cfg.blockfrostUrl, cfg.blockfrostProjectId),
-    journal: new FileJournal(join(opts.home, "intents.jsonl")),
     sign: (cbor) => requestWitness(opts.signerSocket, cbor),
     refScript: state.refScript,
-  };
+  });
 }
 
 const ada = (lovelace: bigint) => Number(lovelace) / 1e6;

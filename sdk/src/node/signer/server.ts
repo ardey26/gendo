@@ -7,15 +7,12 @@
 // redeemer hash, and its intent id goes through the dedupe rule (dedupe.ts).
 // Counters and the intent table persist in `statePath` and are saved before a
 // witness is released, so restarts don't reset limits or forget intents.
-import { appendFileSync, chmodSync, existsSync, readFileSync, unlinkSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, unlinkSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { CML } from "@lucid-evolution/lucid";
-import { fmt } from "../../core/assets.js";
-import { describeTx } from "../../core/cosign.js";
-import { txFate, type ChainQuery, type Fate } from "../../core/idempotency.js";
-import { checkIntent, factsOf } from "./dedupe.js";
-import { evaluate, type SignerPolicy } from "./policy.js";
-import { loadState, saveState } from "./state.js";
+import type { ChainQuery } from "../../core/idempotency.js";
+import { createSigner } from "./core.js";
+import type { SignerPolicy } from "./policy.js";
 
 export type SignerOptions = {
   socketPath: string;
@@ -36,14 +33,7 @@ export type SignerOptions = {
   socketMode?: 0o600 | 0o660;
 };
 
-export function witnessFor(txCbor: string, privateKey: string): string {
-  const tx = CML.Transaction.from_cbor_hex(txCbor);
-  const hash = CML.hash_transaction(tx.body());
-  const sk = CML.PrivateKey.from_bech32(privateKey);
-  const ws = CML.TransactionWitnessSetBuilder.new();
-  ws.add_vkey(CML.make_vkey_witness(hash, sk));
-  return ws.build().to_cbor_hex();
-}
+export { witnessFor } from "./core.js";
 
 export function startSigner(opts: SignerOptions): Promise<Server> {
   const socketMode = opts.socketMode ?? 0o600;
@@ -51,14 +41,11 @@ export function startSigner(opts: SignerOptions): Promise<Server> {
   const sk = CML.PrivateKey.from_bech32(opts.privateKey);
   const pkh = sk.to_public().hash().to_hex();
   if (pkh !== opts.policy.agentKeyHash) throw new Error("private key does not match policy.agentKeyHash");
-  const vaultHash = CML.Address.from_bech32(opts.policy.vaultAddress).payment_cred()?.as_script()?.to_hex();
-  if (!vaultHash) throw new Error("policy.vaultAddress is not a script address");
-  const vault = { hash: vaultHash };
-  const state = loadState(opts.statePath);
-  const now = opts.now ?? Date.now;
-  const audit = (entry: object) => {
-    if (opts.auditLog) appendFileSync(opts.auditLog, JSON.stringify({ at: new Date(now()).toISOString(), ...entry }) + "\n");
-  };
+  const core = createSigner({
+    privateKey: opts.privateKey, policy: opts.policy,
+    ...(opts.statePath ? { statePath: opts.statePath } : {}), ...(opts.auditLog ? { auditLog: opts.auditLog } : {}),
+    ...(opts.chain ? { chain: opts.chain } : {}), ...(opts.now ? { now: opts.now } : {}),
+  });
 
   const server = createServer((req, res) => {
     if (req.method !== "POST" || req.url !== "/sign") {
@@ -71,21 +58,12 @@ export function startSigner(opts: SignerOptions): Promise<Server> {
       if (raw.length > 64_000) req.destroy();
     });
     req.on("end", () => {
-      void handle(raw).then(
+      void decide(raw).then(
         ({ status, body }) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body)),
         (e) => res.writeHead(500).end(JSON.stringify({ error: String(e) })),
       );
     });
   });
-
-  // Requests are handled one at a time: the dedupe check and the state write
-  // must not interleave with another request for the same intent.
-  let queue: Promise<unknown> = Promise.resolve();
-  const handle = (raw: string) => {
-    const run = queue.then(() => decide(raw));
-    queue = run.catch(() => undefined);
-    return run;
-  };
 
   async function decide(raw: string): Promise<{ status: number; body: object }> {
     let txCbor = "";
@@ -94,42 +72,13 @@ export function startSigner(opts: SignerOptions): Promise<Server> {
     } catch {
       return { status: 400, body: { error: "bad request" } };
     }
-    const t = now();
-    const refuse = (txHash: string, reason: string) => {
-      audit({ txHash, decision: "refused", reason });
-      return { status: 403, body: { error: reason } };
-    };
-    let facts;
-    let intentId: string;
     try {
-      facts = factsOf(txCbor, opts.policy.slot);
-      // Attribute the single input to the vault so describeTx reads the vault's own redeemer.
-      // `evaluate` below refuses any tx where that input isn't the configured allowance.
-      const inputAddresses = facts.inputs.length === 1 ? { [`${facts.inputs[0]!.txHash}#${facts.inputs[0]!.index}`]: opts.policy.vaultAddress } : {};
-      const intent = describeTx(txCbor, { vault, inputAddresses }).intent; // verified against the redeemer hash
-      if (!intent?.id) return refuse(facts.hash, "tx carries no verifiable intent record");
-      intentId = intent.id;
+      return { status: 200, body: { witness: await core.sign(txCbor) } };
     } catch (e) {
-      return refuse("", `unreadable tx or intent: ${(e as Error).message}`);
+      const m = (e as Error).message;
+      if (m.startsWith("signer refused: ")) return { status: 403, body: { error: m.slice("signer refused: ".length) } };
+      throw e;
     }
-
-    const prev = state.intents[intentId];
-    let fate: Fate | undefined;
-    if (prev && prev.hash !== facts.hash) fate = opts.chain ? await txFate(opts.chain, prev, t) : undefined;
-    const dedupe = checkIntent(prev, facts.hash, fate);
-    if (!dedupe.ok) return refuse(facts.hash, dedupe.reason);
-
-    const reSign = prev?.hash === facts.hash; // same body: don't count it twice
-    const decision = evaluate(opts.policy, reSign ? { ...state, signed: [] } : state, txCbor, t);
-    if (!decision.ok) return refuse(facts.hash, decision.reason);
-
-    if (!reSign) {
-      if (!decision.coSigned) state.signed.push({ at: t, assets: decision.out }); // escalations don't count against the agent's budget
-      state.intents[intentId] = { ...facts, at: t };
-    }
-    saveState(opts.statePath, state, t); // persisted BEFORE the witness leaves
-    audit({ txHash: facts.hash, intentId, decision: reSign ? "re-signed" : "signed", out: fmt(decision.out) });
-    return { status: 200, body: { witness: witnessFor(txCbor, opts.privateKey) } };
   }
 
   if (existsSync(opts.socketPath)) unlinkSync(opts.socketPath);
