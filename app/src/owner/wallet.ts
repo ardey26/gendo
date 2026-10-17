@@ -82,3 +82,32 @@ export async function partialSign(c: Connected, cbor: string): Promise<string> {
     throw new WalletError("NO_PARTIAL", `This wallet can't co-sign (no partial signing: ${m.slice(0, 100)}). Try Lace or Eternl.`);
   }
 }
+
+/**
+ * The wallet's coins, minus any the chain says are already spent. A wallet learns its coins were spent
+ * only when its own indexer catches up, and a tx our server submitted (a vault creation, an approval)
+ * can leave it listing a spent coin for minutes; a tx built on it fails with BadInputsUTxO.
+ * If the chain can't be asked, the wallet's list is used as is.
+ */
+export function withChainCheckedUtxos(api: Cip30, unspentAt: (address: string) => Promise<{ txHash: string; outputIndex: number }[]>): Cip30 {
+  const check = async (list: string[] | undefined) => {
+    if (!list?.length) return list;
+    try {
+      const coins = list.map((cbor) => {
+        const u = CML.TransactionUnspentOutput.from_cbor_hex(cbor);
+        return { cbor, ref: `${u.input().transaction_id().to_hex()}#${u.input().index()}`, address: u.output().address().to_bech32() };
+      });
+      const live = new Set<string>();
+      for (const address of new Set(coins.map((c) => c.address)))
+        for (const u of await unspentAt(address)) live.add(`${u.txHash}#${u.outputIndex}`);
+      return coins.filter((c) => live.has(c.ref)).map((c) => c.cbor);
+    } catch {
+      return list;
+    }
+  };
+  return {
+    ...api,
+    getUtxos: async () => check(await api.getUtxos()),
+    ...(api.getCollateral ? { getCollateral: async () => check(await api.getCollateral!()) } : {}),
+  };
+}

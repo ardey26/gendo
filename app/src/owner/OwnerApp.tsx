@@ -13,7 +13,7 @@ import { Connect, Start } from "./pages/Start.tsx";
 import { VaultPage } from "./pages/Vault.tsx";
 import type { Net } from "./types.ts";
 import { OwnerCtx, type Owner } from "./ui.tsx";
-import { connectWallet, type Connected } from "./wallet.ts";
+import { connectWallet, withChainCheckedUtxos, type Connected } from "./wallet.ts";
 
 export default function OwnerApp({ route, network }: { route: Route; network: Net }) {
   const [lucid, setLucid] = useState<LucidEvolution>();
@@ -45,7 +45,8 @@ export default function OwnerApp({ route, network }: { route: Route; network: Ne
   useEffect(() => {
     if (!lucid || !me) return;
     readThroughSession(lucid);
-    lucid.selectWallet.fromAPI(me.api as never);
+    // The wallet's own coin list can lag a tx it didn't submit: build only on coins the chain says are unspent.
+    lucid.selectWallet.fromAPI(withChainCheckedUtxos(me.api, (address) => lucid.utxosAt(address)) as never);
   }, [lucid, me]);
 
   useEffect(() => {
