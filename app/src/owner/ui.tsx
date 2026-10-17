@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { LucidEvolution } from "../../../sdk/src/core/index.ts";
 import { navigate } from "../route.ts";
-import { Mark, Netband } from "../ui/Brand.tsx";
+import { Avatar, Mark, Netband } from "../ui/Brand.tsx";
 import type { MyVault } from "./api.ts";
 import type { Net } from "./types.ts";
 import { sidebarVaults } from "./vaults.ts";
@@ -153,7 +153,7 @@ export function Shell({ policy, tab, title, actions, children }: { policy?: stri
           <div className="sidecap cap">Vaults</div>
           {shown.map((v) => (
             <div key={v.policy} className={v.policy === policy ? "vcard cur" : "vcard"}>
-              {nav(`/v/${v.policy}`, <><span className="vtile" aria-hidden="true">{(v.name?.trim() || "V")[0]!.toUpperCase()}</span><span className="vname">{v.name ?? "Unnamed vault"}</span></>, false, count(o.needYou[v.policy]), "nav vhead")}
+              {nav(`/v/${v.policy}`, <><Avatar id={v.policy} kind="vault" size={24} /><span className="vname">{v.name ?? "Unnamed vault"}</span></>, false, count(o.needYou[v.policy]), "nav vhead")}
               {v.policy === policy && (
                 <div className="subnav">
                   {(["agents", "activity", "treasury", "settings"] as const).map((t) => nav(`/v/${policy}/${t}`, <><Icon name={TAB_ICON[t]} />{t[0]!.toUpperCase() + t.slice(1)}</>, tab === t))}

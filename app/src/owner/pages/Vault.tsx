@@ -9,7 +9,7 @@ import { decodeRecipe, encodeRecipe, titleOf, type Recipe } from "../recipes.ts"
 import { prepare, useReview } from "../review.tsx";
 import { toLovelace } from "../validate.ts";
 import { Copy, ErrorNote, Link, Shell, Signers, defaultSigners, short, useLoad, useOwner, usePoll } from "../ui.tsx";
-import { Chain, Spinner } from "../../ui/Brand.tsx";
+import { Avatar, Chain, Spinner } from "../../ui/Brand.tsx";
 import { inFlight } from "../status.ts";
 import { partialSign } from "../wallet.ts";
 
@@ -96,7 +96,7 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
                     const pct = l && l.perPeriod > 0n ? Number((l.spentThisPeriod * 100n) / l.perPeriod) : 0;
                     return (
                       <tr key={a.unit}>
-                        <td className="lead"><div style={{ fontWeight: 700 }}>{data.data!.labels[a.unit] ?? `agent ${short(a.unit.slice(56))}`}</div><div className="faint" style={{ fontSize: 12, maxWidth: 360 }}>{allowanceSentence(a)}</div>{(() => {
+                        <td className="lead"><div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}><Avatar id={a.unit} kind="agent" size={24} />{data.data!.labels[a.unit] ?? `agent ${short(a.unit.slice(56))}`}</div><div className="faint" style={{ fontSize: 12, maxWidth: 360 }}>{allowanceSentence(a)}</div>{(() => {
                           const vs = data.data!.versions;
                           const n = vs ? versionNote(vs.agents[a.unit]?.version, vs) : undefined;
                           return n && <div style={{ fontSize: 12, marginTop: 2, color: n.tone === "required" ? "#e0452b" : n.tone === "update" ? "#d9b24a" : "#8f8578" }}>{n.text}</div>;
