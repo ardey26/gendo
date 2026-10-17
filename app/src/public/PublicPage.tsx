@@ -15,14 +15,12 @@ const get: Get = async (path) => {
   return r.json();
 };
 const short = (s: string) => (s.length > 20 ? `${s.slice(0, 12)}…${s.slice(-4)}` : s);
-const when = (ms: number) => new Date(ms).toISOString().replace("T", " ").slice(0, 16) + " UTC";
 
 type Ready = { phase: "ready"; vault: VaultView; name?: string; listed: boolean; labels: Record<string, string>; history: (PaymentView & { unit: string })[]; tipMs: number };
 type State = { phase: "loading" } | { phase: "error"; message: string } | { phase: "missing" } | Ready;
 
 export function PublicPage({ policy, network }: { policy: string; network: ReadNetwork }) {
   const [s, setS] = useState<State>({ phase: "loading" });
-  const [copied, setCopied] = useState(false);
   useEffect(() => {
     (async () => {
       const tip = (await get("/blocks/latest")) as { time: number } | undefined;
@@ -73,24 +71,21 @@ export function PublicPage({ policy, network }: { policy: string; network: ReadN
   const paidWeek = week.reduce((n, p) => n + p.payees.reduce((m, x) => m + x.lovelace, 0n), 0n);
   const active = vault.allowances.filter((a) => a.status === "active").length;
   const nameOf = (unit: string) => s.labels[unit] ?? `Agent ${short(unit.slice(56))}`;
-  const copyId = () => { void navigator.clipboard?.writeText(policy); setCopied(true); setTimeout(() => setCopied(false), 1500); };
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   return frame(
     <>
       {cfg?.paused && <div className="banner">Paused. No agent can pay until {String(cfg.threshold)} of {cfg.owners.length} owners unpause.</div>}
       <main className="doc">
         <header className="doc-head">
-          <p className="doc-meta">Vault statement, read from the Cardano chain at {when(s.tipMs)}</p>
           <h1>{s.name ?? "A gendo vault"}</h1>
           <p className="doc-lede">
-            {cfg ? (cfg.paused ? <b className="seal">Paused.</b> : <b>Active.</b>) : <b>Config unreadable.</b>}{" "}
+            {cfg?.paused && <><b className="seal">Paused.</b>{" "}</>}
             It holds <b className="mono">{ada(vault.treasuryLovelace)} ADA</b>.{" "}
             {active === 0 ? "No agent can pay from it right now." : <><b>{plural(active, "agent", "agents")}</b> may pay from it, only within the limits written below.</>}{" "}
             {cfg && <>Any change needs owners' seals: <b>{cfg.threshold} of {cfg.owners.length} must sign</b>.</>}{" "}
             In the last 7 days its agents paid <b className="mono">{ada(paidWeek)} ADA</b> in {plural(week.length, "payment", "payments")}.
           </p>
           <p className="doc-ids">
-            <span>Vault id <span className="mono">{short(policy)}</span> <button type="button" className="linkbtn" onClick={copyId}>{copied ? "copied" : "copy"}</button></span>
             <span>Address <Chain value={vault.address} network={network} label={short(vault.address)} /></span>
           </p>
         </header>
@@ -136,11 +131,12 @@ export function PublicPage({ policy, network }: { policy: string; network: ReadN
                 const note = p.purpose ? cleanPurpose(p.purpose) : "";
                 return (
                   <li key={p.txHash + p.unit} className={spend ? "" : "quiet"}>
-                    <span className="mono ledger-date"><Chain value={p.txHash} network={network} label={new Date(p.time).toISOString().slice(0, 10)} /></span>
+                    <span className="mono ledger-date">{new Date(p.time).toISOString().slice(0, 10)}</span>
                     <span className="ledger-what">
                       {s.labels[p.unit] ? `${s.labels[p.unit]}: ` : ""}{paymentLine(p)}.
                       {p.payees.length > 0 && <span className="faint small"> To {p.payees.map((x, i) => <span key={i}>{i > 0 && ", "}<Chain value={x.address} network={network} label={short(x.address)} /></span>)}.</span>}
                       {note && <span className="ledger-note">The agent's note (not verified): {note}</span>}
+                      <span className="faint small">Transaction <Chain value={p.txHash} network={network} label={short(p.txHash)} /></span>
                     </span>
                     <span className="mono ledger-amt">{spend ? `${ada(paid)} ADA` : ""}</span>
                   </li>

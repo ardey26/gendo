@@ -144,14 +144,11 @@ select:hover{border-color:#8f8578}
 /* The public vault page reads like a statement: prose, hairline rules, a ledger, the owners' seals. */
 .doc{max-width:860px;margin:0 auto;padding:40px 20px 64px;box-sizing:border-box}
 .doc-head{padding-bottom:28px;border-bottom:1px solid #2a241e}
-.doc-meta{margin:0 0 14px;font-size:12px;color:#8f8578}
 .doc h1{margin:0 0 14px;font-family:"Shippori Mincho B1","Hiragino Mincho ProN",serif;font-weight:800;font-size:40px;line-height:1.1;letter-spacing:-.01em}
 .doc-lede{margin:0;font-size:17px;line-height:1.65;color:#b9afa0;max-width:680px}
 .doc-lede b{color:#efe7d8;font-weight:700}
 .doc .seal,.doc-lede b.seal{color:#e0452b}
 .doc-ids{display:flex;flex-wrap:wrap;gap:6px 24px;margin:18px 0 0;font-size:12px;color:#8f8578}
-.linkbtn{font:inherit;color:#b9afa0;background:none;border:0;padding:0;margin-left:4px;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
-.linkbtn:hover{color:#efe7d8}
 .doc-sec{padding:28px 0;border-bottom:1px solid #2a241e}
 .doc h2{margin:0 0 6px;font-family:"Shippori Mincho B1","Hiragino Mincho ProN",serif;font-weight:800;font-size:22px}
 .doc-sec>p{margin:0 0 8px;font-size:14px}
