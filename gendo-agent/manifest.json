@@ -2,7 +2,7 @@
   "dxt_version": "0.1",
   "name": "gendo",
   "display_name": "gendo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Give your AI a capped Cardano budget. Pair it with a code from the gendo app.",
   "author": {
     "name": "gendo",

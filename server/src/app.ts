@@ -42,7 +42,7 @@ export function clientIpFrom(header?: string) {
 
 /** Lucid's Blockfrost client sends the key as `project_id`; Caddy drops header names with underscores, so
  * behind it the same value arrives as X-Project-Id (the Caddyfile copies it). */
-const projectIdOf = (c: Context) => c.req.header("project_id") ?? c.req.header("x-project-id");
+const projectIdOf = (c: Context) => c.req.header("project_id") || c.req.header("x-project-id");
 
 /** An error in Blockfrost's shape: Lucid passes `message` on to the agent instead of a generic failure. */
 const bfError = (c: Context, status: 400 | 401 | 403 | 429 | 503, message: string) =>

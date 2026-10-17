@@ -126,3 +126,18 @@ export async function connect(cfg: ProviderConfig): Promise<LucidEvolution> {
   }
   return lucid;
 }
+
+/**
+ * Lucid's Blockfrost client sends its key as a `project_id` header. A proxy like Caddy drops header names
+ * with underscores, so requests to our own server also carry it as X-Project-Id (which the server reads).
+ */
+export function withProjectIdHeader(fetchFn: typeof fetch, base: string): typeof fetch {
+  return ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (!url.startsWith(base) || !init?.headers) return fetchFn(input, init);
+    const headers: Record<string, string> = {};
+    new Headers(init.headers).forEach((v, k) => (headers[k] = v));
+    if (headers.project_id) headers["x-project-id"] = headers.project_id;
+    return fetchFn(input, { ...init, headers });
+  }) as typeof fetch;
+}

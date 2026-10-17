@@ -1,12 +1,12 @@
 {
   "name": "@gendo-cash/agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "@gendo-cash/agent",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "license": "Apache-2.0",
       "dependencies": {
         "@lucid-evolution/lucid": "0.6.5"

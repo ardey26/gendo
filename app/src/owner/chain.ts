@@ -1,6 +1,6 @@
 // The chain, through the server's /chain proxy (the Blockfrost key stays on the server).
 import {
-  Blockfrost, CML, Lucid, SLOT_CONFIG_NETWORK, blockfrostQuery, connect, liveness, makeVault, owner, parseVaultId, txFacts, verifiedOutputs, withRetries,
+  Blockfrost, CML, Lucid, SLOT_CONFIG_NETWORK, blockfrostQuery, connect, liveness, makeVault, owner, parseVaultId, txFacts, verifiedOutputs, withProjectIdHeader, withRetries,
   type Liveness, type LucidEvolution, type UTxO, type Vault,
 } from "../../../sdk/src/core/index.ts";
 import { readVault, type Get } from "../../../sdk/src/read/index.ts";
@@ -12,7 +12,11 @@ const base = () => `${location.origin}/chain`;
 // token, so the proxy skips its cache for owners building txs. Before sign-in: cached reads.
 const pid = () => session.get()?.token ?? "anonymous";
 
+let headerFixed = false;
 export async function openChain(net: Net): Promise<LucidEvolution> {
+  // Behind Caddy, which drops header names with underscores, the session token must travel as X-Project-Id.
+  if (!headerFixed) globalThis.fetch = withProjectIdHeader(globalThis.fetch.bind(globalThis), base());
+  headerFixed = true;
   let l: LucidEvolution;
   if (net === "Custom") {
     const g = (await (await fetch(`${base()}/genesis`)).json()) as { system_start: number; slot_length: number };

@@ -126,6 +126,8 @@ describe("an agent connected by pairing", async () => {
     // Behind Caddy, which drops header names with underscores, the token arrives as X-Project-Id.
     const viaProxy = await app.request("/chain/tx/submit", { method: "POST", headers: { "x-project-id": token!, "content-type": "application/cbor" }, body: Buffer.from("00", "hex") });
     expect(viaProxy.status).toBe(403); // the token is recognized; the junk tx is what's refused
+    const emptyFirst = await app.request("/chain/tx/submit", { method: "POST", headers: { project_id: "", "x-project-id": token!, "content-type": "application/cbor" }, body: Buffer.from("00", "hex") });
+    expect(emptyFirst.status).toBe(403); // an empty project_id doesn't hide the real one
     // Refusals use Blockfrost's error shape, so Lucid passes the reason through instead of "Could not submit transaction."
     expect(await viaProxy.json()).toMatchObject({ status_code: 400, error: "Bad Request", message: expect.stringMatching(/not a transaction/) });
     expect(submitted).toHaveLength(1);

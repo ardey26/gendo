@@ -67,7 +67,7 @@ const onResult = (r: unknown) => {
 };
 
 const server = new McpServer(
-  { name: "gendo", version: "0.1.0" },
+  { name: "gendo", version: "0.1.1" },
   {
     instructions: [
       "You pay from a gendo allowance: an on-chain budget the vault owners gave you on Cardano (preprod).",
