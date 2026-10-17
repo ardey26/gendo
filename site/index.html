@@ -116,16 +116,6 @@
   .pays div.no { background: transparent; border: 1px dashed var(--red-line); color: var(--mute); }
   .pays div.no span:last-child { color: var(--red); }
 
-  /* connect */
-  .connect { display: flex; flex-wrap: wrap; padding-top: clamp(40px, 5vw, 64px); }
-  .connect-k { display: flex; align-items: center; gap: 14px; padding: 0 40px 28px 0; min-width: 200px; }
-  .connect-k .kanji { font-size: 30px; color: var(--red); }
-  .connect-k .mono { font-size: 13px; color: var(--mute); letter-spacing: .08em; text-transform: uppercase; }
-  .connect-i { flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px; padding: 0 32px 28px 28px; border-left: 1px solid var(--line); }
-  .connect-i b { font-size: 24px; font-weight: 900; letter-spacing: -.02em; }
-  .connect-i span { font-size: 15px; color: var(--soft); }
-  .connect-i code { font: 13px var(--mono); color: var(--paper); }
-  .connect-rule { border-bottom: 1px solid var(--line); }
 
   /* how it works */
   .how { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 48px; align-items: start; }
@@ -305,8 +295,6 @@
     .flow-grid { grid-template-columns: 1fr; }
     .flow-grid .allowance { grid-column: auto; order: 0; }
     .flow-card { padding: 22px; }
-    .connect-k { padding-right: 0; min-width: 100%; }
-    .connect-i { flex-basis: 100%; padding: 16px 0 16px 20px; }
     .steps { grid-template-columns: 1fr; }
     .rule-grid { grid-template-columns: 1fr; }
     .uses { grid-template-columns: 1fr; }
@@ -390,15 +378,6 @@
           <p>Your AI pays on its own. The chain checks every payment against its budget.</p>
         </div>
       </div>
-    </div>
-  </section>
-
-  <section class="connect-rule" aria-label="Where it works">
-    <div class="wrap connect">
-      <div class="connect-k"><span class="kanji" aria-hidden="true">接続</span><span class="mono">Works with</span></div>
-      <div class="connect-i"><b>Claude Desktop</b><span>Download one file, paste the pairing code from the app. No terminal.</span></div>
-      <div class="connect-i"><b>Cursor, LM Studio</b><span>One click from the app; the pairing code is already in it.</span></div>
-      <div class="connect-i"><b>Local models</b><span>Any app that supports MCP, open-weight models included. Builders get a TypeScript SDK.</span></div>
     </div>
   </section>
 
