@@ -6,6 +6,9 @@ set -euo pipefail
 OUT="$(mkdir -p "${1:?usage: pack.sh <outdir>}" && cd "$1" && pwd)"
 cd "$(dirname "$0")"
 VERSION=$(node -p 'require("./package.json").version')
+# Claude Desktop builds read either the older format (dxt_version) or the newer one: check with both.
+npx -y @anthropic-ai/dxt@0.2.6 validate manifest.json >/dev/null
+npx -y @anthropic-ai/mcpb@2.1.2 validate manifest.json >/dev/null
 ./build.sh
 
 # The npm package: dist/, package.json and npm-shrinkwrap.json (which npm honours when installing it).

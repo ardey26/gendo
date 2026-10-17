@@ -1,24 +1,45 @@
 {
-  "manifest_version": "0.3",
+  "dxt_version": "0.1",
   "name": "gendo",
   "display_name": "gendo",
   "version": "0.1.0",
   "description": "Give your AI a capped Cardano budget. Pair it with a code from the gendo app.",
-  "author": { "name": "gendo", "url": "https://gendo.cash" },
+  "author": {
+    "name": "gendo",
+    "url": "https://gendo.cash"
+  },
   "homepage": "https://gendo.cash",
   "server": {
     "type": "node",
     "entry_point": "server/main.mjs",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/server/main.mjs", "--pair", "${user_config.pairing_code}", "--server", "${user_config.server}"]
+      "args": [
+        "${__dirname}/server/main.mjs",
+        "--pair",
+        "${user_config.pairing_code}",
+        "--server",
+        "${user_config.server}"
+      ]
     }
   },
   "tools": [
-    { "name": "connection_status", "description": "Whether this agent is paired and has a budget yet" },
-    { "name": "get_budget", "description": "What it may spend right now" },
-    { "name": "pay", "description": "Pay an approved payee within its limits" },
-    { "name": "request_approval", "description": "Ask the owners to approve a payment over its limits" }
+    {
+      "name": "connection_status",
+      "description": "Whether this agent is paired and has a budget yet"
+    },
+    {
+      "name": "get_budget",
+      "description": "What it may spend right now"
+    },
+    {
+      "name": "pay",
+      "description": "Pay an approved payee within its limits"
+    },
+    {
+      "name": "request_approval",
+      "description": "Ask the owners to approve a payment over its limits"
+    }
   ],
   "user_config": {
     "pairing_code": {
@@ -35,5 +56,14 @@
       "required": false
     }
   },
-  "compatibility": { "platforms": ["darwin", "win32", "linux"], "runtimes": { "node": ">=22.0.0" } }
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=22.0.0"
+    }
+  }
 }
