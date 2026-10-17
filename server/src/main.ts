@@ -47,12 +47,23 @@ const owners = async (policy: string) => {
   ownerCache.set(policy, { at: Date.now(), owners: found });
   return found;
 };
+// Agents' submits and status checks read the vault often: a short cache spares the shared quota. A stale
+// allowance ref costs nothing: the node refuses a tx whose input is already spent.
+const vaultCache = new Map<string, { at: number; view: Awaited<ReturnType<typeof readVault>> }>();
+const vaultSoon = async (policy: string) => {
+  const hit = vaultCache.get(policy);
+  if (hit && Date.now() - hit.at < 10_000) return hit.view;
+  const view = await readVault(get, policy, network, Date.now());
+  if (vaultCache.size >= 1_000) vaultCache.delete(vaultCache.keys().next().value!);
+  vaultCache.set(policy, { at: Date.now(), view });
+  return view;
+};
 const allowanceOf = async (policy: string, unit: string) => {
-  const a = (await readVault(get, policy, network, Date.now()))?.allowances.find((x) => x.unit === unit);
+  const a = (await vaultSoon(policy))?.allowances.find((x) => x.unit === unit);
   return a?.agent ? { ref: `${a.txHash}#${a.outputIndex}`, agent: a.agent } : undefined;
 };
 const allowanceForAgent = async (policy: string, agent: string) => {
-  const a = (await readVault(get, policy, network, Date.now()))?.allowances.find((x) => x.agent === agent);
+  const a = (await vaultSoon(policy))?.allowances.find((x) => x.agent === agent);
   return a ? { unit: a.unit, ref: `${a.txHash}#${a.outputIndex}` } : undefined;
 };
 const submit = async (cbor: string) => {

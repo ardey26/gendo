@@ -72,7 +72,11 @@ describe("an agent connected by pairing", async () => {
   await call("POST", "/me/vaults", owners, { vaultId });
   const p = (await (await call("POST", `/vaults/${vault.hash}/pairings`, owners, { name: "My Claude" })).json()) as { id: string; code: string };
   await call("POST", "/pairings/claim", {}, { code: p.code, ...signMessage(agent.privateKey, pairingMessage(p.code)) });
-  const status = async (ms = t, k = agent) => (await call("POST", "/agent/status", {}, { ms, ...signMessage(k.privateKey, statusMessage(ms)) })).json() as Promise<Record<string, string>>;
+  let seq = 0; // each status request signs a later time than the one before
+  const status = async (o: { ms?: number; k?: typeof agent; wantToken?: boolean } = {}) => {
+    const ms = o.ms ?? t + ++seq;
+    return (await call("POST", "/agent/status", {}, { ms, ...signMessage((o.k ?? agent).privateKey, statusMessage(ms)), ...(o.wantToken ? { wantToken: true } : {}) })).json() as Promise<Record<string, string>>;
+  };
 
   it("is not ready until the owners confirm, then gets its vault, allowance, token and name", async () => {
     expect((await status()).status).toBe("claimed");
@@ -81,14 +85,37 @@ describe("an agent connected by pairing", async () => {
     expect(r).toMatchObject({ status: "ready", vaultId, unit, name: "My Claude" });
     expect(r.token).toMatch(/^gnd_[0-9a-f]{64}$/);
     expect(db.labelsOf(vault.hash)[unit]).toBe("My Claude");
+    first = r.token!;
+  });
+  let first = "";
+  it("later answers don't replace the token unless the agent asks (an agent that lost it)", async () => {
+    const again = await status();
+    expect(again.status).toBe("ready");
+    expect(again.token).toBeUndefined();
+    const fresh = (await status({ wantToken: true })).token!;
+    expect(fresh).toMatch(/^gnd_[0-9a-f]{64}$/);
+    expect(db.agentOfToken((await import("../src/auth.js")).sha256(first))).toBeUndefined(); // the old one stopped working
+  });
+  it("a replayed status request is refused", async () => {
+    const ms = t + 1000;
+    const body = { ms, ...signMessage(agent.privateKey, statusMessage(ms)), wantToken: true };
+    expect((await call("POST", "/agent/status", {}, body)).status).toBe(200);
+    expect((await call("POST", "/agent/status", {}, body)).status).toBe(401);
   });
   it("refuses a stale status signature", async () => {
-    const old = t - 6 * 60_000;
+    const old = t - 6 * 60_000; // more than 5 minutes off
     expect((await call("POST", "/agent/status", {}, { ms: old, ...signMessage(agent.privateKey, statusMessage(old)) })).status).toBe(401);
   });
-  it("a key with no pairing is unknown", async () => expect((await status(t, payee)).status).toBe("unknown"));
+  it("a key with no pairing is unknown", async () => expect((await status({ k: payee })).status).toBe("unknown"));
+  it("one agent token gets its own, smaller budget of fresh chain reads", async () => {
+    const { token } = await status({ ms: t + 2000, wantToken: true });
+    const codes: number[] = [];
+    for (let i = 0; i < 125; i++) codes.push((await app.request("/chain/blocks/latest", { headers: { project_id: token! } })).status);
+    expect(codes.slice(0, 120).every((c) => c !== 429)).toBe(true);
+    expect(codes.slice(120)).toEqual([429, 429, 429, 429, 429]);
+  });
   it("relays the agent's own allowance spend, and nothing else", async () => {
-    const { token } = await status();
+    const { token } = await status({ ms: t + 3000, wantToken: true });
     const post = async (cbor: string, pid = token!) => app.request("/chain/tx/submit", { method: "POST", headers: { project_id: pid, "content-type": "application/cbor" }, body: Buffer.from(cbor, "hex") });
     const ok = await post(await signed(agent, unit));
     expect(ok.status).toBe(200);

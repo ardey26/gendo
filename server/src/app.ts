@@ -66,6 +66,17 @@ export function createApp(d: {
   const cache = new Map<string, { at: number; status: number; body: string }>();
   let cacheBytes = 0;
   const hits = new Map<string, { minute: number; n: number }>();
+  // Agent tokens live on the agent's machine, next to its AI's tools: each gets its own, smaller budget
+  // of uncached reads and submits, so one leaked token can't use up the shared Blockfrost quota.
+  const AGENT_PER_MINUTE = 120;
+  const agentHits = new Map<string, { minute: number; n: number }>();
+  const agentLimited = (tokenHash: string) => {
+    const minute = Math.floor(now() / 60_000);
+    if (agentHits.size > 10_000) for (const [k, v] of agentHits) if (v.minute !== minute) agentHits.delete(k);
+    const h = agentHits.get(tokenHash);
+    if (!h || h.minute !== minute) return agentHits.set(tokenHash, { minute, n: 1 }), false;
+    return ++h.n > AGENT_PER_MINUTE;
+  };
   const app = new Hono();
   app.onError((e, c) => (e instanceof SyntaxError ? c.json({ error: "malformed JSON" }, 400) : c.json({ error: "server error" }, 500)));
   // Everything but the chain proxy (which has its own bucket): sign-in, inbox, requests.
@@ -123,7 +134,9 @@ export function createApp(d: {
     // that header): it builds txs on the current state, so it skips the cache. Everyone else, the
     // public page included, gets cached answers, so nobody can burn the shared quota by asking.
     const pid = c.req.header("project_id");
-    const fresh = !!auth.pkhOfToken(pid) || (/^gnd_[0-9a-f]{64}$/.test(pid ?? "") && !!d.store.agentOfToken(sha256(pid!)));
+    const agentToken = /^gnd_[0-9a-f]{64}$/.test(pid ?? "") && !!d.store.agentOfToken(sha256(pid!));
+    if (agentToken && agentLimited(sha256(pid!))) return c.json({ error: "too many requests" }, 429);
+    const fresh = !!auth.pkhOfToken(pid) || agentToken;
     if (hit && !fresh && now() - hit.at < ttl(hit.status)) return c.body(hit.body, hit.status as 200, { "content-type": "application/json" });
     let res: Response;
     try {
@@ -152,7 +165,7 @@ export function createApp(d: {
     const pid = c.req.header("project_id") ?? "";
     const agent = /^gnd_[0-9a-f]{64}$/.test(pid) ? d.store.agentOfToken(sha256(pid)) : undefined;
     if (!agent) return c.json({ error: "not allowed" }, 401);
-    if (limited(`submit:${clientIp(c)}`)) return c.json({ error: "too many requests" }, 429);
+    if (limited(`submit:${clientIp(c)}`) || agentLimited(sha256(pid))) return c.json({ error: "too many requests" }, 429);
     const cbor = Buffer.from(await c.req.arrayBuffer()).toString("hex");
     const al = await d.allowanceOf(agent.policy, agent.unit);
     if (!al) return c.json({ error: "this allowance isn't on chain any more" }, 403);

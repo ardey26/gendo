@@ -66,6 +66,13 @@ export function openStore(path: string) {
   const claimStmt = db.prepare("update pairings set agent = ?, public_key = ?, status = 'claimed' where id = ? and status = 'open'");
   const setPairingStmt = db.prepare("update pairings set status = ? where id = ? and status = ?");
   const byAgent = db.prepare("select * from pairings where agent = ? order by created_at desc limit 20");
+  // The latest signed time the agent sent: each status request must be later, so a captured one can't be replayed.
+  try {
+    db.exec("alter table pairings add column last_status_ms integer not null default 0");
+  } catch {
+    // already there
+  }
+  const bumpMs = db.prepare("update pairings set last_status_ms = ? where id = ? and last_status_ms < ?");
   const get = db.prepare("select policy, name, listed from vaults where policy = ?");
   const put = db.prepare(
     "insert into vaults (policy, name, listed) values (?, ?, ?) on conflict(policy) do update set name = excluded.name, listed = excluded.listed",
@@ -122,6 +129,8 @@ export function openStore(path: string) {
     claimPairing: (id: string, agent: string, publicKey: string) => claimStmt.run(agent, publicKey, id).changes === 1,
     setPairingStatus: (id: string, from: string, to: string) => setPairingStmt.run(to, id, from).changes === 1,
     pairingsByAgent: (agent: string) => byAgent.all(agent) as PairingRow[],
+    /** Compare-and-set: true only if `ms` is later than every status request seen for this pairing. */
+    bumpStatusMs: (id: string, ms: number) => bumpMs.run(ms, id, ms).changes === 1,
     labelsOf: (policy: string): Record<string, string> =>
       Object.fromEntries((labelsOf.all(policy) as { unit: string; name: string }[]).map((r) => [r.unit, r.name])),
   };

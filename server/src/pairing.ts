@@ -82,7 +82,7 @@ export function mountPairing(app: Hono, d: PairingDeps, auth: ReturnType<typeof 
 
   // The agent asks where it stands, signing the time with its key (refused if more than 5 minutes off).
   app.post("/agent/status", async (c) => {
-    const { publicKey, signature, ms } = await c.req.json<{ publicKey?: unknown; signature?: unknown; ms?: unknown }>();
+    const { publicKey, signature, ms, wantToken } = await c.req.json<{ publicKey?: unknown; signature?: unknown; ms?: unknown; wantToken?: unknown }>();
     if (typeof publicKey !== "string" || typeof signature !== "string" || typeof ms !== "number" || publicKey.length > 128 || signature.length > 256)
       return c.json({ error: "publicKey, signature and ms are required" }, 400);
     if (Math.abs(d.now() - ms) > 5 * 60_000) return c.json({ error: "this machine's clock is off by more than 5 minutes" }, 401);
@@ -90,13 +90,17 @@ export function mountPairing(app: Hono, d: PairingDeps, auth: ReturnType<typeof 
     if (!agent) return c.json({ error: "bad signature" }, 401);
     const r = d.store.pairingsByAgent(agent).find((x) => ["claimed", "confirmed", "ready"].includes(x.status));
     if (!r) return c.json({ status: "unknown" });
+    if (!d.store.bumpStatusMs(r.id, ms)) return c.json({ error: "a replayed or out-of-order status request" }, 401);
     const base = { words: confirmWords(agent), name: r.name };
     if (r.status === "claimed") return c.json({ status: "claimed", ...base });
     const found = await d.allowanceForAgent(r.policy, agent);
     const vaultId = d.store.userVaults(r.created_by).find((v) => v.policy === r.policy)?.vaultId;
     if (!found || !vaultId) return c.json({ status: "confirmed", ...base });
-    d.store.putLabel(r.policy, found.unit, r.name);
-    if (r.status === "confirmed") d.store.setPairingStatus(r.id, "confirmed", "ready");
-    return c.json({ status: "ready", ...base, vaultId, unit: found.unit, token: newAgentToken(d.store, r.policy, found.unit, d.now()) });
+    // The token is issued once, when the budget lands; afterwards only if the agent asks (it lost its token,
+    // or an owner issued a new one). A token handed out on every answer would cut off a running agent.
+    const becomesReady = r.status === "confirmed" && d.store.setPairingStatus(r.id, "confirmed", "ready");
+    if (becomesReady) d.store.putLabel(r.policy, found.unit, r.name);
+    const token = becomesReady || wantToken === true ? newAgentToken(d.store, r.policy, found.unit, d.now()) : undefined;
+    return c.json({ status: "ready", ...base, vaultId, unit: found.unit, ...(token ? { token } : {}) });
   });
 }
