@@ -5,6 +5,7 @@ import { randomBytes, randomInt } from "node:crypto";
 import type { Context, Hono } from "hono";
 import { confirmWords, pairingMessage, statusMessage, verifyMessage } from "../../sdk/src/core/pairing.js";
 import { sha256, type mountAuth } from "./auth.js";
+import { LATEST_AGENT, MIN_AGENT } from "./agent-version.js";
 import { newAgentToken } from "./pending.js";
 import type { PairingRow, openStore } from "./store.js";
 
@@ -82,7 +83,7 @@ export function mountPairing(app: Hono, d: PairingDeps, auth: ReturnType<typeof 
 
   // The agent asks where it stands, signing the time with its key (refused if more than 5 minutes off).
   app.post("/agent/status", async (c) => {
-    const { publicKey, signature, ms, wantToken } = await c.req.json<{ publicKey?: unknown; signature?: unknown; ms?: unknown; wantToken?: unknown }>();
+    const { publicKey, signature, ms, wantToken, version } = await c.req.json<{ publicKey?: unknown; signature?: unknown; ms?: unknown; wantToken?: unknown; version?: unknown }>();
     if (typeof publicKey !== "string" || typeof signature !== "string" || typeof ms !== "number" || publicKey.length > 128 || signature.length > 256)
       return c.json({ error: "publicKey, signature and ms are required" }, 400);
     if (Math.abs(d.now() - ms) > 5 * 60_000) return c.json({ error: "this machine's clock is off by more than 5 minutes" }, 401);
@@ -91,7 +92,8 @@ export function mountPairing(app: Hono, d: PairingDeps, auth: ReturnType<typeof 
     const r = d.store.pairingsByAgent(agent).find((x) => ["claimed", "confirmed", "ready"].includes(x.status));
     if (!r) return c.json({ status: "unknown" });
     if (!d.store.bumpStatusMs(r.id, ms)) return c.json({ error: "a replayed or out-of-order status request" }, 401);
-    const base = { words: confirmWords(agent), name: r.name };
+    if (typeof version === "string" && /^\d+\.\d+\.\d+$/.test(version)) d.store.setAgentVersion(agent, version);
+    const base = { words: confirmWords(agent), name: r.name, latestVersion: LATEST_AGENT, minVersion: MIN_AGENT };
     if (r.status === "claimed") return c.json({ status: "claimed", ...base });
     const found = await d.allowanceForAgent(r.policy, agent);
     const vaultId = d.store.userVaults(r.created_by).find((v) => v.policy === r.policy)?.vaultId;
@@ -100,7 +102,18 @@ export function mountPairing(app: Hono, d: PairingDeps, auth: ReturnType<typeof 
     // or an owner issued a new one). A token handed out on every answer would cut off a running agent.
     const becomesReady = r.status === "confirmed" && d.store.setPairingStatus(r.id, "confirmed", "ready");
     if (becomesReady) d.store.putLabel(r.policy, found.unit, r.name);
+    d.store.setPairingUnit(r.id, found.unit);
     const token = becomesReady || wantToken === true ? newAgentToken(d.store, r.policy, found.unit, d.now()) : undefined;
     return c.json({ status: "ready", ...base, vaultId, unit: found.unit, ...(token ? { token } : {}) });
+  });
+
+  // Which gendo-agent version each paired agent runs, for the owners' Agents tab.
+  app.get("/vaults/:policy/agents/versions", async (c) => {
+    const policy = c.req.param("policy");
+    if (!isPolicy(policy)) return c.json({ error: "bad vault id" }, 400);
+    const who = await auth.ownerOf(c, policy);
+    if (typeof who !== "string") return who;
+    const agents = Object.fromEntries(d.store.agentVersionsFor(policy).map((a) => [a.unit, { version: a.version }]));
+    return c.json({ latest: LATEST_AGENT, min: MIN_AGENT, agents });
   });
 }

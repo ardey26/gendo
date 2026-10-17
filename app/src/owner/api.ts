@@ -74,6 +74,7 @@ export const api = {
   pairing: (id: string) => call<Pairing>("GET", `/pairings/${id}`),
   confirmPairing: (id: string) => call<Pairing>("POST", `/pairings/${id}/confirm`),
   cancelPairing: (id: string) => call<Pairing>("POST", `/pairings/${id}/cancel`),
+  agentVersions: (policy: string) => call<{ latest: string; min: string; agents: Record<string, { version: string }> }>("GET", `/vaults/${policy}/agents/versions`),
   sign: (id: string, witness: string) => call<PendingView>("POST", `/pending/${id}/witness`, { witness }),
   agentToken: (policy: string, unit: string) => call<{ token: string }>("POST", `/vaults/${policy}/agents/${unit}/token`, {}),
   setLabel: (policy: string, unit: string, name: string) => call<unknown>("PUT", `/vaults/${policy}/agents/${unit}/label`, { name }),

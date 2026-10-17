@@ -73,6 +73,17 @@ export function openStore(path: string) {
     // already there
   }
   const bumpMs = db.prepare("update pairings set last_status_ms = ? where id = ? and last_status_ms < ?");
+  // Which gendo-agent version each paired agent last reported, and its allowance once ready (for the owners' view).
+  for (const col of ["agent_version text", "unit text"]) {
+    try {
+      db.exec(`alter table pairings add column ${col}`);
+    } catch {
+      // already there
+    }
+  }
+  const setVersion = db.prepare("update pairings set agent_version = ? where agent = ?");
+  const setUnit = db.prepare("update pairings set unit = ? where id = ?");
+  const versionsFor = db.prepare("select unit, agent_version from pairings where policy = ? and unit is not null and agent_version is not null");
   const get = db.prepare("select policy, name, listed from vaults where policy = ?");
   const put = db.prepare(
     "insert into vaults (policy, name, listed) values (?, ?, ?) on conflict(policy) do update set name = excluded.name, listed = excluded.listed",
@@ -131,6 +142,9 @@ export function openStore(path: string) {
     pairingsByAgent: (agent: string) => byAgent.all(agent) as PairingRow[],
     /** Compare-and-set: true only if `ms` is later than every status request seen for this pairing. */
     bumpStatusMs: (id: string, ms: number) => bumpMs.run(ms, id, ms).changes === 1,
+    setAgentVersion: (agent: string, version: string) => void setVersion.run(version, agent),
+    setPairingUnit: (id: string, unit: string) => void setUnit.run(unit, id),
+    agentVersionsFor: (policy: string) => (versionsFor.all(policy) as { unit: string; agent_version: string }[]).map((r) => ({ unit: r.unit, version: r.agent_version })),
     labelsOf: (policy: string): Record<string, string> =>
       Object.fromEntries((labelsOf.all(policy) as { unit: string; name: string }[]).map((r) => [r.unit, r.name])),
   };

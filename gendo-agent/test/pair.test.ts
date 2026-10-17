@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { confirmWords } from "../../sdk/src/core/pairing.js";
 import { openHome } from "../src/home.js";
 import { step } from "../src/pair.js";
+import { AGENT_VERSION } from "../src/version.js";
 
 const fake = (routes: Record<string, () => [number, unknown]>) => {
   const seen: string[] = [];
@@ -63,5 +64,16 @@ describe("pairing from the agent's side", () => {
     expect((await step(h, s2.f)).status).toBe("ready");
     expect(s2.bodies[0]!.wantToken).toBeUndefined();
     expect(h.state.ready?.token).toBe("gnd_first");
+  });
+  it("reports its version, and says plainly when there's an update or a required one", async () => {
+    const ready = { status: "ready", words: "w", name: "n", vaultId: "v", unit: "u", token: "gnd_t" };
+    const s1 = fake({ "/pairings/claim": () => [200, { id: "p" }], "/agent/status": () => [200, { ...ready, latestVersion: "9.0.0", minVersion: "0.0.1" }] });
+    const c1 = await step(home(), s1.f);
+    expect(s1.bodies[1]).toMatchObject({ version: AGENT_VERSION });
+    expect(c1.update).toMatch(/update to gendo 9\.0\.0 is available.*Connect an agent/i);
+    const s2 = fake({ "/pairings/claim": () => [200, { id: "p" }], "/agent/status": () => [200, { ...ready, latestVersion: "9.0.0", minVersion: "9.0.0" }] });
+    expect((await step(home(), s2.f)).update).toMatch(/payments need gendo 9\.0\.0/i);
+    const s3 = fake({ "/pairings/claim": () => [200, { id: "p" }], "/agent/status": () => [200, { ...ready, latestVersion: AGENT_VERSION, minVersion: AGENT_VERSION }] });
+    expect((await step(home(), s3.f)).update).toBeUndefined();
   });
 });

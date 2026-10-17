@@ -1,3 +1,4 @@
+import { versionNote } from "../install.ts";
 import { useEffect, useState } from "react";
 import { allowanceHistory } from "../../../../sdk/src/read/index.ts";
 import { ada, allowanceSentence, cleanPurpose, paymentLine } from "../../public/format.ts";
@@ -16,8 +17,8 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
   const o = useOwner();
   const mine = o.vaults.find((v) => v.policy === policy);
   const data = useLoad(async () => {
-    const [view, listing, pending] = await Promise.all([readLight(policy, o.net), api.listing(policy), api.pendingOf(policy)]);
-    return { view, labels: listing?.agents ?? {}, listing, pending };
+    const [view, listing, pending, versions] = await Promise.all([readLight(policy, o.net), api.listing(policy), api.pendingOf(policy), api.agentVersions(policy).catch(() => undefined)]);
+    return { view, labels: listing?.agents ?? {}, listing, pending, versions };
   }, [policy]);
   const review = useReview(o.net);
   const [busy, setBusy] = useState<string>();
@@ -95,7 +96,11 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
                     const pct = l && l.perPeriod > 0n ? Number((l.spentThisPeriod * 100n) / l.perPeriod) : 0;
                     return (
                       <tr key={a.unit}>
-                        <td><div style={{ fontWeight: 700 }}>{data.data!.labels[a.unit] ?? `agent ${short(a.unit.slice(56))}`}</div><div className="faint" style={{ fontSize: 12, maxWidth: 360 }}>{allowanceSentence(a)}</div></td>
+                        <td><div style={{ fontWeight: 700 }}>{data.data!.labels[a.unit] ?? `agent ${short(a.unit.slice(56))}`}</div><div className="faint" style={{ fontSize: 12, maxWidth: 360 }}>{allowanceSentence(a)}</div>{(() => {
+                          const vs = data.data!.versions;
+                          const n = vs ? versionNote(vs.agents[a.unit]?.version, vs) : undefined;
+                          return n && <div style={{ fontSize: 12, marginTop: 2, color: n.tone === "required" ? "#e0452b" : n.tone === "update" ? "#d9b24a" : "#8f8578" }}>{n.text}</div>;
+                        })()}</td>
                         <td><span className="pill">{a.status === "active" && cfg?.paused ? "paused" : a.status}</span></td>
                         <td style={{ minWidth: 170 }}>{l ? <><div className="mono">{ada(l.spentThisPeriod)} / {ada(l.perPeriod)} ADA</div><div className="bar"><i style={{ width: `${Math.min(100, pct)}%` }} /></div></> : "—"}</td>
                         <td className="mono">{l ? `${ada(l.perPayment)} ADA` : "—"}</td>

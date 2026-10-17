@@ -27,4 +27,13 @@ describe("tools before ready", () => {
     await client.callTool({ name: "get_budget", arguments: {} });
     expect(seen).toEqual([{ status: "not_ready", message: "x" }]);
   });
+  it("adds the agent's notice (an update) to every result", async () => {
+    const server = new McpServer({ name: "t", version: "0" });
+    registerTools(server, async () => ({ notReady: "x" }), undefined, () => "An update to gendo 9.0.0 is available.");
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "c", version: "0" });
+    await Promise.all([server.connect(a), client.connect(b)]);
+    const r = await client.callTool({ name: "get_budget", arguments: {} });
+    expect(JSON.parse((r.content as { text: string }[])[0]!.text)).toEqual({ status: "not_ready", message: "x", notice: "An update to gendo 9.0.0 is available." });
+  });
 });

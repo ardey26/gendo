@@ -10,6 +10,7 @@ import { pairingMessage, signMessage, statusMessage } from "../../sdk/src/core/p
 import { formatVaultId } from "../../sdk/src/core/vault.js";
 import { ADA, collateralOf, party, signAndSubmit } from "../../sdk/test/helpers.js";
 import { createApp } from "../src/app.js";
+import { LATEST_AGENT as LATEST, MIN_AGENT } from "../src/agent-version.js";
 import { json, signIn, store } from "./helpers.js";
 
 describe("an agent connected by pairing", async () => {
@@ -73,9 +74,10 @@ describe("an agent connected by pairing", async () => {
   const p = (await (await call("POST", `/vaults/${vault.hash}/pairings`, owners, { name: "My Claude" })).json()) as { id: string; code: string };
   await call("POST", "/pairings/claim", {}, { code: p.code, ...signMessage(agent.privateKey, pairingMessage(p.code)) });
   let seq = 0; // each status request signs a later time than the one before
-  const status = async (o: { ms?: number; k?: typeof agent; wantToken?: boolean } = {}) => {
+  const status = async (o: { ms?: number; k?: typeof agent; wantToken?: boolean; version?: string } = {}) => {
     const ms = o.ms ?? t + ++seq;
-    return (await call("POST", "/agent/status", {}, { ms, ...signMessage((o.k ?? agent).privateKey, statusMessage(ms)), ...(o.wantToken ? { wantToken: true } : {}) })).json() as Promise<Record<string, string>>;
+    const body = { ms, ...signMessage((o.k ?? agent).privateKey, statusMessage(ms)), ...(o.wantToken ? { wantToken: true } : {}), version: o.version ?? LATEST };
+    return (await call("POST", "/agent/status", {}, body)).json() as Promise<Record<string, string>>;
   };
 
   it("is not ready until the owners confirm, then gets its vault, allowance, token and name", async () => {
@@ -95,6 +97,13 @@ describe("an agent connected by pairing", async () => {
     const fresh = (await status({ wantToken: true })).token!;
     expect(fresh).toMatch(/^gnd_[0-9a-f]{64}$/);
     expect(db.agentOfToken((await import("../src/auth.js")).sha256(first))).toBeUndefined(); // the old one stopped working
+  });
+  it("tells the agent the latest and minimum versions, and the owners which version each agent runs", async () => {
+    const r = await status({ version: "0.1.1" });
+    expect(r).toMatchObject({ latestVersion: LATEST, minVersion: MIN_AGENT });
+    const v = (await (await call("GET", `/vaults/${vault.hash}/agents/versions`, owners)).json()) as { latest: string; agents: Record<string, { version: string }> };
+    expect(v.latest).toBe(LATEST);
+    expect(v.agents[unit]).toEqual({ version: "0.1.1" });
   });
   it("a replayed status request is refused", async () => {
     const ms = t + 1000;
@@ -116,7 +125,8 @@ describe("an agent connected by pairing", async () => {
   });
   it("relays the agent's own allowance spend, and nothing else", async () => {
     const { token } = await status({ ms: t + 3000, wantToken: true });
-    const post = async (cbor: string, pid = token!) => app.request("/chain/tx/submit", { method: "POST", headers: { project_id: pid, "content-type": "application/cbor" }, body: Buffer.from(cbor, "hex") });
+    const post = async (cbor: string, pid = token!, version: string | null = LATEST) =>
+      app.request("/chain/tx/submit", { method: "POST", headers: { project_id: pid, "content-type": "application/cbor", ...(version ? { "x-gendo-agent": version } : {}) }, body: Buffer.from(cbor, "hex") });
     const ok = await post(await signed(agent, unit));
     expect(ok.status).toBe(200);
     expect(await ok.json()).toBe("h1");
@@ -124,12 +134,18 @@ describe("an agent connected by pairing", async () => {
     expect((await post(await signed(agent, unit, true))).status).toBe(403); // an escalation goes through the inbox
     expect((await post("00", "gnd_" + "0".repeat(64))).status).toBe(401);
     // Behind Caddy, which drops header names with underscores, the token arrives as X-Project-Id.
-    const viaProxy = await app.request("/chain/tx/submit", { method: "POST", headers: { "x-project-id": token!, "content-type": "application/cbor" }, body: Buffer.from("00", "hex") });
+    const viaProxy = await app.request("/chain/tx/submit", { method: "POST", headers: { "x-project-id": token!, "content-type": "application/cbor", "x-gendo-agent": LATEST }, body: Buffer.from("00", "hex") });
     expect(viaProxy.status).toBe(403); // the token is recognized; the junk tx is what's refused
-    const emptyFirst = await app.request("/chain/tx/submit", { method: "POST", headers: { project_id: "", "x-project-id": token!, "content-type": "application/cbor" }, body: Buffer.from("00", "hex") });
+    const emptyFirst = await app.request("/chain/tx/submit", { method: "POST", headers: { project_id: "", "x-project-id": token!, "content-type": "application/cbor", "x-gendo-agent": LATEST }, body: Buffer.from("00", "hex") });
     expect(emptyFirst.status).toBe(403); // an empty project_id doesn't hide the real one
     // Refusals use Blockfrost's error shape, so Lucid passes the reason through instead of "Could not submit transaction."
     expect(await viaProxy.json()).toMatchObject({ status_code: 400, error: "Bad Request", message: expect.stringMatching(/not a transaction/) });
-    expect(submitted).toHaveLength(1);
+    // An agent older than the minimum is told to update, and nothing is sent.
+    const tooOld = await post(await signed(agent, unit), token!, "0.1.0");
+    expect(tooOld.status).toBe(426);
+    expect(((await tooOld.json()) as { message: string }).message).toMatch(/update gendo/i);
+    // 0.1.1 predates the version header: no header means 0.1.1, which still meets the minimum.
+    expect((await post(await signed(agent, unit), token!, null)).status).toBe(200);
+    expect(submitted).toHaveLength(2);
   });
 });

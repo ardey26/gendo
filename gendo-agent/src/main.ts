@@ -14,6 +14,7 @@ import { openChain } from "./chain.js";
 import { openHome } from "./home.js";
 import { step, type Connection } from "./pair.js";
 import { pairedSigner } from "./signer.js";
+import { AGENT_VERSION } from "./version.js";
 
 console.log = (...a: unknown[]) => console.error(...a); // stdout carries the protocol
 
@@ -28,6 +29,7 @@ const h = openHome(v.home ?? join(homedir(), ".gendo", "agents"), code, v.server
 let conn: Connection = { status: "unknown", message: "Connecting to gendo…" };
 let session: AgentSession | undefined;
 let needToken = false;
+let update: string | undefined; // set from the server's latest and minimum versions
 let opening: Promise<void> | undefined;
 
 /** Move the pairing along; once the budget has landed, open the session (once, reusing the stored token). */
@@ -35,6 +37,7 @@ async function refresh() {
   if (session) return;
   if (!h.state.ready?.token || needToken) {
     conn = await step(h, fetch, { wantToken: needToken });
+    update = conn.update;
     if (conn.status !== "ready") return;
     needToken = false;
   }
@@ -54,7 +57,7 @@ async function refresh() {
   process.env.GENDO_SERVER = h.state.server;
   process.env.GENDO_AGENT_TOKEN = token;
   session = sessionFromParts({ lucid, vault, unit, home: h.dir, q, sign: (cbor) => signer.sign(cbor), ...(id.refScript ? { refScript: id.refScript } : {}) });
-  conn = { status: "ready", words: confirmWords(h.pkh), message: `Connected (${confirmWords(h.pkh)}). Ready to pay within its budget.` };
+  conn = { status: "ready", words: confirmWords(h.pkh), message: `Connected (${confirmWords(h.pkh)}). Ready to pay within its budget.`, ...(update ? { update } : {}) };
 }
 const tick = () => (opening ??= refresh().catch((e) => void (conn = { status: "error", message: (e as Error).message })).finally(() => (opening = undefined)));
 /** The server stopped taking our token (an owner issued a new one): ask for a fresh one with a signed request. */
@@ -67,7 +70,7 @@ const onResult = (r: unknown) => {
 };
 
 const server = new McpServer(
-  { name: "gendo", version: "0.1.1" },
+  { name: "gendo", version: AGENT_VERSION },
   {
     instructions: [
       "You pay from a gendo allowance: an on-chain budget the vault owners gave you on Cardano (preprod).",
@@ -97,9 +100,18 @@ registerTools(
     return session ?? { notReady: conn.message };
   },
   onResult,
+  () => update,
 );
 
 await server.connect(new StdioServerTransport());
 void tick();
 setInterval(() => void (session || tick()), 15_000).unref();
+// Once connected, ask about new versions a few times a day (a signed status request, no new token).
+setInterval(() => {
+  if (!session) return;
+  void step(h, fetch).then((c) => {
+    update = c.update;
+    if (conn.status === "ready") conn = { ...conn, ...(update ? { update } : { update: undefined }) };
+  }).catch(() => undefined);
+}, 6 * 3_600_000).unref();
 console.error(`gendo-agent running (key ${h.pkh.slice(0, 8)}…, ${h.state.server})`);

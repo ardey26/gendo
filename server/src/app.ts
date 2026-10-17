@@ -6,6 +6,8 @@ import { bodyLimit } from "hono/body-limit";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { mountAuth, sha256 } from "./auth.js";
 import { mountPairing } from "./pairing.js";
+import { olderThan } from "../../sdk/src/core/version.js";
+import { MIN_AGENT } from "./agent-version.js";
 import { agentSpendProblem, mountPending, type SubmitResult } from "./pending.js";
 import type { openStore } from "./store.js";
 
@@ -45,7 +47,7 @@ export function clientIpFrom(header?: string) {
 const projectIdOf = (c: Context) => c.req.header("project_id") || c.req.header("x-project-id");
 
 /** An error in Blockfrost's shape: Lucid passes `message` on to the agent instead of a generic failure. */
-const bfError = (c: Context, status: 400 | 401 | 403 | 429 | 503, message: string) =>
+const bfError = (c: Context, status: 400 | 401 | 403 | 426 | 429 | 503, message: string) =>
   c.json({ status_code: 400, error: "Bad Request", message }, status);
 
 export function createApp(d: {
@@ -174,11 +176,16 @@ export function createApp(d: {
     const agent = /^gnd_[0-9a-f]{64}$/.test(pid) ? d.store.agentOfToken(sha256(pid)) : undefined;
     if (!agent) return bfError(c, 401, "the gendo server doesn't recognize this agent's token");
     if (limited(`submit:${clientIp(c)}`) || agentLimited(sha256(pid))) return bfError(c, 429, "too many requests; wait a minute");
+    // gendo-agent 0.1.1 predates the version header (0.1.0 can't reach us through the proxy at all).
+    const version = c.req.header("x-gendo-agent") ?? "0.1.1";
+    if (olderThan(version, MIN_AGENT))
+      return bfError(c, 426, `Update gendo: this agent runs ${version}, and payments need ${MIN_AGENT} or later. Reinstall it from Connect an agent in the gendo app; it keeps its key and budget.`);
     const cbor = Buffer.from(await c.req.arrayBuffer()).toString("hex");
     const al = await d.allowanceOf(agent.policy, agent.unit);
     if (!al) return bfError(c, 403, "this allowance isn't on chain any more");
     const problem = agentSpendProblem(cbor, agent.policy, al.ref, al.agent);
     if (problem) return bfError(c, 403, problem);
+    d.store.setAgentVersion(al.agent, version);
     const r = await d.submit(cbor);
     if (!r.ok) console.error(`agent submit refused by the chain (${agent.unit.slice(56, 64)}): ${r.error.slice(0, 300)}`);
     return r.ok ? c.json(r.hash) : bfError(c, r.transient ? 503 : 400, `the chain refused it: ${r.error.slice(0, 500)}`);

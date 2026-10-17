@@ -17,12 +17,19 @@ const payment = {
  * `session` resolves to the agent's session, or to why it isn't ready yet (gendo-agent before its budget lands).
  * `onResult` sees every tool result (gendo-agent reconnects when the server stops accepting its token).
  */
-export function registerTools(server: McpServer, session: () => Promise<AgentSession | { notReady: string }>, onResult?: (r: unknown) => void) {
+export function registerTools(
+  server: McpServer,
+  session: () => Promise<AgentSession | { notReady: string }>,
+  onResult?: (r: unknown) => void,
+  /** Something the user should hear with every result (gendo-agent: an update is available). */
+  notice?: () => string | undefined,
+) {
   const ready = async <T>(run: (s: AgentSession) => Promise<T>) => {
     const s = await session();
     const out = "notReady" in s ? { status: "not_ready", message: s.notReady } : await run(s);
     onResult?.(out);
-    return json(out);
+    const n = notice?.();
+    return json(n ? { ...(out as object), notice: n } : out);
   };
 
   server.registerTool(
