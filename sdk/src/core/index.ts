@@ -9,6 +9,7 @@ export * from "./chain.js";
 export * from "./limits.js";
 export * from "./intent.js";
 export * from "./guards.js";
+export * from "./pairing.js";
 export * from "./creation.js";
 export * as owner from "./owner.js";
 export * as agent from "./agent.js";

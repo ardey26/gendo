@@ -1,7 +1,7 @@
 // Owner side. Every function returns an UNSIGNED tx; owners sign offline and
 // the witnesses are assembled with cosign.ts. The proposer's wallet (selected
 // on `lucid`) pays fees and provides collateral; vault value never pays them.
-import type { Assets, LucidEvolution, TxSignBuilder, UTxO } from "@lucid-evolution/lucid";
+import { credentialToAddress, type Assets, type LucidEvolution, type TxSignBuilder, type UTxO } from "@lucid-evolution/lucid";
 import { add, sub, withMinAda } from "./assets.js";
 import type { AllowanceUtxo, ConfigUtxo } from "./chain.js";
 import {
@@ -176,7 +176,7 @@ export async function grantAllowance(
   config: ConfigUtxo,
   g: Grant,
   ownerSigners: string[],
-  opts: { fromTreasury?: UTxO[] } = {},
+  opts: { fromTreasury?: UTxO[]; agentCollateral?: bigint } = {},
 ): Promise<{ tx: TxSignBuilder; unit: string }> {
   const datum = grantDatum(g, vault.network);
   const problems = wellFormedProblems(datum);
@@ -201,6 +201,8 @@ export async function grantAllowance(
     b = b.collectFrom(opts.fromTreasury, OWNER);
     if (Object.keys(leftover).length) b = b.pay.ToAddress(vault.address, leftover);
   }
+  // A new agent's key has no ADA; the ledger needs a plain-ADA UTxO there as collateral for its spends.
+  if (opts.agentCollateral) b = b.pay.ToAddress(credentialToAddress(lucid.config().network!, { type: "Key", hash: g.agent }), { lovelace: opts.agentCollateral });
   return { tx: await finish(lucid, signers(b, ownerSigners)), unit };
 }
 
