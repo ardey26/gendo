@@ -5,6 +5,7 @@ import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { mountAuth } from "./auth.js";
+import { mountPairing } from "./pairing.js";
 import { mountPending, type SubmitResult } from "./pending.js";
 import type { openStore } from "./store.js";
 
@@ -81,6 +82,7 @@ export function createApp(d: {
     },
     auth,
   );
+  mountPairing(app, { store: d.store, now }, auth);
 
   function limited(ip: string) {
     const minute = Math.floor(now() / 60_000);

@@ -4,6 +4,10 @@
 import { DatabaseSync } from "node:sqlite";
 
 export type Listing = { policy: string; name: string; listed: boolean };
+export type PairingRow = {
+  id: string; policy: string; name: string; created_by: string; code_hash: string; expires_at: number;
+  agent: string | null; public_key: string | null; status: string; created_at: number;
+};
 export type PendingRow = {
   id: string; policy: string; kind: string; title: string; cbor: string; body_hash: string; recipe: string | null; required: string;
   created_by: string; created_at: number; status: string; tx_hash: string | null; error: string | null; unit: string | null;
@@ -54,6 +58,14 @@ export function openStore(path: string) {
   const getToken = db.prepare("select policy, unit from agent_tokens where token_hash = ?");
   const putLabel = db.prepare("insert into labels (policy, unit, name) values (?, ?, ?) on conflict(policy, unit) do update set name = excluded.name");
   const labelsOf = db.prepare("select unit, name from labels where policy = ?");
+  // Connecting an agent: a short-lived code, then the agent's public key once it claims it.
+  db.exec("create table if not exists pairings (id text primary key, policy text not null, name text not null, created_by text not null, code_hash text not null unique, expires_at integer not null, agent text, public_key text, status text not null default 'open', created_at integer not null)");
+  const insPairing = db.prepare("insert into pairings (id, policy, name, created_by, code_hash, expires_at, created_at) values (?, ?, ?, ?, ?, ?, ?)");
+  const byCode = db.prepare("select * from pairings where code_hash = ?");
+  const getPairingStmt = db.prepare("select * from pairings where id = ?");
+  const claimStmt = db.prepare("update pairings set agent = ?, public_key = ?, status = 'claimed' where id = ? and status = 'open'");
+  const setPairingStmt = db.prepare("update pairings set status = ? where id = ? and status = ?");
+  const byAgent = db.prepare("select * from pairings where agent = ? order by created_at desc limit 20");
   const get = db.prepare("select policy, name, listed from vaults where policy = ?");
   const put = db.prepare(
     "insert into vaults (policy, name, listed) values (?, ?, ?) on conflict(policy) do update set name = excluded.name, listed = excluded.listed",
@@ -102,6 +114,14 @@ export function openStore(path: string) {
     },
     agentOfToken: (hash: string) => getToken.get(hash) as { policy: string; unit: string } | undefined,
     putLabel: (policy: string, unit: string, name: string) => void putLabel.run(policy, unit, name),
+    putPairing: (r: { id: string; policy: string; name: string; createdBy: string; codeHash: string; expiresAt: number; createdAt: number }) =>
+      void insPairing.run(r.id, r.policy, r.name, r.createdBy, r.codeHash, r.expiresAt, r.createdAt),
+    pairingByCode: (codeHash: string) => byCode.get(codeHash) as PairingRow | undefined,
+    getPairing: (id: string) => getPairingStmt.get(id) as PairingRow | undefined,
+    /** Compare-and-set: only an open pairing can be claimed, once. */
+    claimPairing: (id: string, agent: string, publicKey: string) => claimStmt.run(agent, publicKey, id).changes === 1,
+    setPairingStatus: (id: string, from: string, to: string) => setPairingStmt.run(to, id, from).changes === 1,
+    pairingsByAgent: (agent: string) => byAgent.all(agent) as PairingRow[],
     labelsOf: (policy: string): Record<string, string> =>
       Object.fromEntries((labelsOf.all(policy) as { unit: string; name: string }[]).map((r) => [r.unit, r.name])),
   };
