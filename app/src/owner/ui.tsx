@@ -95,9 +95,27 @@ export function Signers({ owners, threshold, me, value, onChange }: { owners: st
   );
 }
 
+// Sidebar icons: 20×20 strokes in the text's color.
+const ICONS: Record<string, string> = {
+  inbox: "M3 11.5l2-6.5h10l2 6.5v3.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM3 11.5h4l1 2h4l1-2h4",
+  agents: "M10 9.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4 17c.6-3 3-4.5 6-4.5s5.4 1.5 6 4.5",
+  activity: "M2.5 10h3.5l2-5 4 10 2-5h3.5",
+  treasury: "M3 7.5l7-4 7 4M4.5 8.5v6M8.5 8.5v6M11.5 8.5v6M15.5 8.5v6M3 16.5h14",
+  settings: "M3.5 6h8M15.5 6h1M3.5 14h1M8.5 14h8M13.5 4v4M6.5 12v4",
+  public: "M10 17.5a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15zM2.5 10h15M10 2.5c2 2 3 4.5 3 7.5s-1 5.5-3 7.5c-2-2-3-4.5-3-7.5s1-5.5 3-7.5z",
+  all: "M3.5 3.5h5v5h-5zM11.5 3.5h5v5h-5zM3.5 11.5h5v5h-5zM11.5 11.5h5v5h-5z",
+  create: "M10 4v12M4 10h12",
+  out: "M8 4H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M12.5 13.5L16 10l-3.5-3.5M16 10H8",
+};
+const Icon = ({ name, size = 16 }: { name: keyof typeof ICONS; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}><path d={ICONS[name]} /></svg>
+);
+const TAB_ICON = { agents: "agents", activity: "activity", treasury: "treasury", settings: "settings" } as const;
+
 export function Shell({ policy, tab, title, actions, children }: { policy?: string; tab?: string; title: ReactNode; actions?: ReactNode; children: ReactNode }) {
   const o = useOwner();
   const [open, setOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   useEffect(() => {
     if (!open) return;
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -131,33 +149,43 @@ export function Shell({ policy, tab, title, actions, children }: { policy?: stri
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" /></svg>
             </button>
           </div>
-          {nav("/", "Needs you", path === "/", count(o.inboxCount))}
+          {nav("/", <><Icon name="inbox" />Needs you</>, path === "/", count(o.inboxCount))}
           <div className="sidecap cap">Vaults</div>
           {shown.map((v) => (
-            <div key={v.policy}>
-              {nav(`/v/${v.policy}`, <span className="vname">{v.name ?? "Unnamed vault"}</span>, false, count(o.needYou[v.policy]), v.policy === policy ? "nav cur" : "nav")}
+            <div key={v.policy} className={v.policy === policy ? "vcard cur" : "vcard"}>
+              {nav(`/v/${v.policy}`, <><span className="vtile" aria-hidden="true">{(v.name?.trim() || "V")[0]!.toUpperCase()}</span><span className="vname">{v.name ?? "Unnamed vault"}</span></>, false, count(o.needYou[v.policy]), "nav vhead")}
               {v.policy === policy && (
                 <div className="subnav">
-                  {(["agents", "activity", "treasury", "settings"] as const).map((t) => nav(`/v/${policy}/${t}`, t[0]!.toUpperCase() + t.slice(1), tab === t))}
-                  <a className="nav" href={`/w/${policy}`}>Public page</a>
+                  {(["agents", "activity", "treasury", "settings"] as const).map((t) => nav(`/v/${policy}/${t}`, <><Icon name={TAB_ICON[t]} />{t[0]!.toUpperCase() + t.slice(1)}</>, tab === t))}
+                  <a className="nav" href={`/w/${policy}`}><Icon name="public" />Public page</a>
                 </div>
               )}
             </div>
           ))}
           {!o.vaults.length && <span className="faint" style={{ padding: "4px 10px", fontSize: 12 }}>No vaults yet.</span>}
-          {nav("/vaults", <>View all vaults{o.vaults.length > shown.length ? <span className="faint">{o.vaults.length}</span> : null}</>, path === "/vaults", undefined, "nav more")}
-          {nav("/new", "Create a vault", path === "/new", undefined, "nav more")}
+          {nav("/vaults", <><Icon name="all" />View all vaults{o.vaults.length > shown.length ? <span className="faint">{o.vaults.length}</span> : null}</>, path === "/vaults", undefined, "nav more")}
+          {nav("/new", <><Icon name="create" />Create a vault</>, path === "/new", undefined, "nav more")}
           <div style={{ flexGrow: 1, minHeight: 16 }} />
+          {leaving ? (
+            <div className="who ask" role="group" aria-label="Disconnect">
+              <span style={{ fontSize: 13 }}>Disconnect {walletName}? You'll sign in again to come back.</span>
+              <span style={{ display: "flex", gap: 8 }}>
+                <button type="button" className="btn" onClick={() => setLeaving(false)}>Cancel</button>
+                <button type="button" className="btn stop" onClick={o.signOut}>Disconnect</button>
+              </span>
+            </div>
+          ) : (
           <div className="who">
             {icon ? <img src={icon} alt="" width={28} height={28} /> : <span className="wico" aria-hidden="true">{walletName[0]}</span>}
             <span style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
               <span className="mono" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={o.me.address}>{short(o.me.address)}</span>
               <span className="faint" style={{ fontSize: 11 }}>{walletName}</span>
             </span>
-            <button type="button" className="menu" aria-label="Disconnect" title="Disconnect" onClick={o.signOut}>
-              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 4H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M12.5 13.5L16 10l-3.5-3.5M16 10H8" /></svg>
+            <button type="button" className="menu" aria-label="Disconnect" title="Disconnect" onClick={() => setLeaving(true)}>
+              <Icon name="out" size={18} />
             </button>
           </div>
+          )}
         </nav>
         <div className="content">
           <div className="top"><div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>{title}</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div></div>

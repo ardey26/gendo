@@ -100,12 +100,24 @@ select:hover{border-color:#8f8578}
 .menu:hover{background:#15120f;color:#efe7d8}
 .menu .count{margin-left:0}
 .vname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.subnav{display:flex;flex-direction:column;gap:2px;margin:2px 0 6px 10px;padding-left:8px;border-left:1px solid #2a241e}
+/* Each vault is its own little card, sunk into the sidebar; the open one is lifted and holds its pages. */
+.vcard{margin:0 0 6px;border:1px solid #2a241e;border-radius:8px;background:#0b0907;box-shadow:inset 0 1px 3px rgba(0,0,0,.6)}
+.vcard .nav{border-radius:7px}
+.vcard.cur{border-color:#3a332b;background:#15120f;box-shadow:inset 0 1px 0 rgba(239,231,216,.04),0 1px 2px rgba(0,0,0,.4)}
+.nav.vhead{padding:8px 10px;color:#efe7d8}
+.vcard.cur .nav.vhead{font-weight:700}
+.vtile{display:inline-flex;width:22px;height:22px;border-radius:5px;align-items:center;justify-content:center;flex-shrink:0;background:#1f1a15;border:1px solid #3a332b;color:#b9afa0;font-size:11px;font-weight:700}
+.vcard.cur .vtile{background:#e0452b;border-color:#e0452b;color:#efe7d8}
+.subnav{display:flex;flex-direction:column;gap:2px;padding:2px 6px 6px;border-top:1px solid #2a241e}
+.vcard.cur .nav:hover{background:#1f1a15}
+.vcard.cur .nav.on{background:#241e18}
 .nav.cur{color:#efe7d8;font-weight:700}
 .nav.more{color:#8f8578}
 .nav.more:hover{color:#efe7d8}
 .nav.more .faint{margin-left:auto;font-size:12px}
-.who{display:flex;align-items:center;gap:10px;margin-top:8px;padding:10px 6px 4px 10px;border-top:1px solid #2a241e}
+.who{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:8px;padding:10px 6px 4px 10px;border-top:1px solid #2a241e;min-height:44px}
+.who.ask{flex-direction:column;align-items:stretch;gap:8px;padding-right:10px}
+.who.ask .btn{flex:1;justify-content:center}
 .who img,.who .wico{width:28px;height:28px;border-radius:6px;flex-shrink:0}
 .mbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px 8px 16px;border-bottom:1px solid #2a241e;background:#0f0d0a;position:sticky;top:0;z-index:20}
 @media (max-width:799px){
