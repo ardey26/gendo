@@ -29,6 +29,9 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
   const [busy, setBusy] = useState<string>();
   const [err, setErr] = useState<string>();
   const [note, setNote] = useState<string>();
+  // After a proposal, until the form changes: say so up top, and don't offer to propose the same thing again.
+  const [proposed, setProposed] = useState(false);
+  useEffect(() => setProposed(false), [f, signers]);
   const [token, setToken] = useState<string>();
   // Arrived from "Connect an agent": the agent and its name come from the pairing, never typed.
   const pairingId = unit ? null : new URLSearchParams(location.search).get("pairing");
@@ -97,6 +100,8 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
       const p = await api.propose(policy, { cbor, witness: await partialSign(o.me, cbor), title: titleOf(r, labels), recipe: encodeRecipe(r) });
       if (unit && f.name.trim() && f.name.trim() !== (d?.labels[unit] ?? "")) await api.setLabel(policy, unit, f.name.trim()).catch(() => undefined);
       setNote(`${done} Signed by you: ${p.signedBy.length} of ${p.requiredSigners.length}. It's in the other owners' Needs you. Nothing changes on-chain until it lands.`);
+      setProposed(true);
+      scrollTo({ top: 0, behavior: "smooth" });
       void o.reloadInbox();
     } catch (e) {
       setErr((e as Error).message);
@@ -130,9 +135,15 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
       policy={policy}
       tab="agents"
       title={<><Link to={`/v/${policy}`}>{mine.name ?? "Vault"}</Link><span className="faint">/</span><Link to={`/v/${policy}/agents`}>Agents</Link><span className="faint">/</span><span>{name}</span></>}
-      actions={<button type="button" className="btn pri" disabled={!!busy || problems.length > 0 || signers.length !== threshold} onClick={() => void save()}>{unit ? "Propose change" : "Propose agent"}</button>}
+      actions={<button type="button" className="btn pri" disabled={!!busy || proposed || problems.length > 0 || signers.length !== threshold} onClick={() => void save()}>{proposed ? "Proposed ✓" : unit ? "Propose change" : "Propose agent"}</button>}
     >
       {review.panel}
+      {proposed && note && (
+        <div className="note" role="status" style={{ margin: "16px 20px 0", borderColor: "#e0452b", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
+          <span>{note}</span>
+          <span style={{ display: "flex", gap: 8 }}><Link to="/inbox" className="btn">Needs you</Link><Link to={`/v/${policy}/agents`} className="btn">Back to agents</Link></span>
+        </div>
+      )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, padding: "16px 20px", alignItems: "flex-start" }} {...(loaded.loading ? {} : { "data-ready": "" })}>
         <section className="panel" style={{ flex: "999 1 480px", minWidth: 0 }}>
           <div className="ph"><h2>Allowance</h2><span className="cap">Changes need {threshold} of {d?.cfg.owners.length ?? "?"} owners</span></div>
@@ -180,7 +191,7 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
             <div style={{ padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
               {problems.map((p) => <ErrorNote key={p} error={p} />)}
               {busy && <div className="note"><Spinner label={busy} /></div>}
-              {note && <div className="note">{note} <Link to="/inbox">Needs you</Link></div>}
+              {note && !proposed && <div className="note">{note} <Link to="/inbox">Needs you</Link></div>}
               <ErrorNote error={err ?? loaded.error} />
             </div>
           </section>
