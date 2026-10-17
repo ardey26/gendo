@@ -79,6 +79,6 @@ export const api = {
   setLabel: (policy: string, unit: string, name: string) => call<unknown>("PUT", `/vaults/${policy}/agents/${unit}/label`, { name }),
   listing: async (policy: string) => {
     const r = await fetch(`/public/${policy}`).catch(() => undefined);
-    return r?.ok ? ((await r.json()) as { name: string; listed: boolean; agents: Record<string, string> }) : undefined;
+    return r?.ok ? ((await r.json()) as { name: string | null; listed: boolean; agents: Record<string, string> }) : undefined;
   },
 };

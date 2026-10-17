@@ -27,3 +27,8 @@ SRV=$!; trap 'kill $SRV 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do curl -s -o /dev/null http://localhost:8796/ && break; sleep 1; done
 APP=http://localhost:8796 ADDR_B=$($V keys show b | jq -r .address) VAULT_ID=$VAULT_ID POLICY=$POLICY UNIT=$UNIT KEY_A=$(cat "$VAULT_HOME/keys/a.sk") KEY_B=$(cat "$VAULT_HOME/keys/b.sk") \
   node "$ROOT/app/test/owner-e2e.mjs"
+# Connect an agent with no terminal: pairing code, gendo-agent over stdio, confirm words, budget, first payment.
+"$ROOT/gendo-agent/build.sh"
+APP=http://localhost:8796 POLICY=$POLICY KEY_A=$(cat "$VAULT_HOME/keys/a.sk") KEY_B=$(cat "$VAULT_HOME/keys/b.sk") \
+  PAYEE=$($V keys show payee | jq -r .address) AGENT_MAIN="$ROOT/gendo-agent/dist/main.mjs" \
+  node "$ROOT/app/test/agent-e2e.mjs"

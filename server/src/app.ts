@@ -166,7 +166,10 @@ export function createApp(d: {
     const policy = c.req.param("policy");
     if (!/^[0-9a-f]{56}$/.test(policy)) return c.json({ error: "bad vault id" }, 400);
     const l = d.store.get(policy);
-    return l ? c.json({ ...l, agents: d.store.labelsOf(policy) }) : c.json({ error: "unknown vault" }, 404);
+    const agents = d.store.labelsOf(policy);
+    // A vault nobody named yet still has named agents: answer with those rather than nothing.
+    if (!l && !Object.keys(agents).length) return c.json({ error: "unknown vault" }, 404);
+    return c.json({ ...(l ?? { policy, name: null, listed: false }), agents });
   });
 
   return app;

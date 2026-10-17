@@ -38,11 +38,15 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
 
 /** Run `fn` every `ms` while `active`. */
 export function usePoll(fn: () => void, active: boolean, ms = 5_000) {
+  // The latest callback, without restarting the timer: a page that re-renders more often than `ms`
+  // (a countdown, say) would otherwise never let the interval fire.
+  const latest = useRef(fn);
+  latest.current = fn;
   useEffect(() => {
     if (!active) return;
-    const t = setInterval(fn, ms);
+    const t = setInterval(() => latest.current(), ms);
     return () => clearInterval(t);
-  }, [active, fn, ms]);
+  }, [active, ms]);
 }
 
 export function Link({ to, className, children }: { to: string; className?: string; children: ReactNode }) {

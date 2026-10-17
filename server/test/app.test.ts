@@ -108,6 +108,12 @@ describe("public listing", () => {
     const app = createApp({ owners: async () => undefined, allowanceOf: async () => undefined, submit: async () => ({ ok: false as const, error: "unused" }), store: s, upstream: async () => new Response("{}") });
     expect(await (await app.request(`/public/${policy}`)).json()).toEqual({ policy, name: "Acme payouts", listed: true, agents: {} });
   });
+  it("an unnamed vault's agent names still come back", async () => {
+    const s = store();
+    s.putLabel(policy, policy + "01", "My Claude");
+    const app = createApp({ owners: async () => undefined, allowanceOf: async () => undefined, submit: async () => ({ ok: false as const, error: "unused" }), store: s, upstream: async () => new Response("{}") });
+    expect(await (await app.request(`/public/${policy}`)).json()).toEqual({ policy, name: null, listed: false, agents: { [policy + "01"]: "My Claude" } });
+  });
   it("404 for unknown, 400 for a malformed id", async () => {
     const app = createApp({ owners: async () => undefined, allowanceOf: async () => undefined, submit: async () => ({ ok: false as const, error: "unused" }), store: store(), upstream: async () => new Response("{}") });
     expect((await app.request(`/public/${policy}`)).status).toBe(404);

@@ -3,7 +3,7 @@ import { fromPlutusAddress, readAllowance, readConfig, toPlutusAddress, type All
 import { api } from "../api.ts";
 import { vaultFromId } from "../chain.ts";
 import { sentence } from "../diff.ts";
-import { encodeRecipe, titleOf, type Recipe } from "../recipes.ts";
+import { encodeRecipe, grantedUnit, titleOf, type Recipe } from "../recipes.ts";
 import { prepare, useReview } from "../review.tsx";
 import { agentProblems, editedDatum, PERIOD_MS, toLovelace, type AgentForm } from "../validate.ts";
 import { Copy, ErrorNote, Link, Shell, Signers, defaultSigners, short, useLoad, useOwner } from "../ui.tsx";
@@ -90,7 +90,11 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
       if (!(await review.ask(prepared))) return;
       setBusy("Waiting for your wallet…");
       const cbor = prepared.cbor;
-      const p = await api.propose(policy, { cbor, witness: await partialSign(o.me, cbor), title: titleOf(r, d?.labels ?? {}), recipe: encodeRecipe(r) });
+      // Name a new agent now, so the other owners review "Add My Claude", not a bare id.
+      const granted = r.op === "grant" && f.name.trim() ? grantedUnit(cbor, policy) : undefined;
+      if (granted) await api.setLabel(policy, granted, f.name.trim()).catch(() => undefined);
+      const labels = granted ? { ...(d?.labels ?? {}), [granted]: f.name.trim() } : d?.labels ?? {};
+      const p = await api.propose(policy, { cbor, witness: await partialSign(o.me, cbor), title: titleOf(r, labels), recipe: encodeRecipe(r) });
       if (unit && f.name.trim() && f.name.trim() !== (d?.labels[unit] ?? "")) await api.setLabel(policy, unit, f.name.trim()).catch(() => undefined);
       setNote(`${done} Signed by you: ${p.signedBy.length} of ${p.requiredSigners.length}. It's in the other owners' Needs you. Nothing changes on-chain until it lands.`);
       void o.reloadInbox();
@@ -112,7 +116,7 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
         // A paired agent's own address starts empty; it needs a little ADA there as collateral.
         ...(pairing.data?.agent ? { collateral: 5_000_000n } : {}),
       };
-      return propose({ op: "grant", grant, signers }, pairing.data?.agent ? `Proposed. ${f.name.trim()} connects once it lands.` : `Proposed ${f.name.trim()}. Name it once it lands.`);
+      return propose({ op: "grant", grant, signers }, pairing.data?.agent ? `Proposed. ${f.name.trim()} connects once it lands.` : `Proposed ${f.name.trim()}.`);
     }
   };
   const set = (k: keyof AgentForm) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });

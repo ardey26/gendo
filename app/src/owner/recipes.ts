@@ -1,7 +1,7 @@
 // A proposal's recipe: what to build, so any required signer can rebuild it when it goes stale.
 import type { AllowanceDatum, Explanation } from "../../../sdk/src/core/index.ts";
 import type { Grant } from "../../../sdk/src/core/owner.ts";
-import { listAllowances, owner, readAllowance, readConfig, treasuryUtxos, type LucidEvolution, type TxSignBuilder, type Vault } from "../../../sdk/src/core/index.ts";
+import { CML, CONFIG_TOKEN_NAME, listAllowances, multiAssetToAssets, owner, readAllowance, readConfig, treasuryUtxos, type LucidEvolution, type TxSignBuilder, type Vault } from "../../../sdk/src/core/index.ts";
 
 export type Recipe =
   | { op: "pause" }
@@ -97,4 +97,10 @@ export function recipeMatches(r: Recipe, e: Explanation): boolean {
     case "fund":
       return c.length === 0 && Object.keys(e.leavesVault).length === 0;
   }
+}
+
+/** The allowance a grant tx mints (its vault-policy token that isn't the config), so it can be named before it lands. */
+export function grantedUnit(cbor: string, policy: string): string | undefined {
+  const minted = multiAssetToAssets(CML.Transaction.from_cbor_hex(cbor).body().mint()) as Record<string, bigint>;
+  return Object.keys(minted).find((u) => u.startsWith(policy) && u !== policy + CONFIG_TOKEN_NAME && minted[u] === 1n);
 }
