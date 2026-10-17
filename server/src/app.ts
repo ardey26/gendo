@@ -4,9 +4,9 @@
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { getConnInfo } from "@hono/node-server/conninfo";
-import { mountAuth } from "./auth.js";
+import { mountAuth, sha256 } from "./auth.js";
 import { mountPairing } from "./pairing.js";
-import { mountPending, type SubmitResult } from "./pending.js";
+import { agentSpendProblem, mountPending, type SubmitResult } from "./pending.js";
 import type { openStore } from "./store.js";
 
 // What the public page and the owner pages read. Never submit, accounts or pools: owners' txs
@@ -53,6 +53,8 @@ export function createApp(d: {
   submit: (txCbor: string) => Promise<SubmitResult>;
   /** An allowance's current UTxO and agent key, from the chain. */
   allowanceOf: (policy: string, unit: string) => Promise<{ ref: string; agent: string } | undefined>;
+  /** The allowance on chain whose agent is this key (pairing: when its budget has landed). */
+  allowanceForAgent?: (policy: string, agent: string) => Promise<{ unit: string; ref: string } | undefined>;
   /** The network vault ids must be on ("Preprod" or "Custom"). */
   network?: string;
   maxOpenPerVault?: number;
@@ -82,7 +84,7 @@ export function createApp(d: {
     },
     auth,
   );
-  mountPairing(app, { store: d.store, now }, auth);
+  mountPairing(app, { store: d.store, now, allowanceForAgent: d.allowanceForAgent ?? (async () => undefined) }, auth);
 
   function limited(ip: string) {
     const minute = Math.floor(now() / 60_000);
@@ -120,7 +122,8 @@ export function createApp(d: {
     // A signed-in owner's app sends its session token as project_id (Lucid's Blockfrost client sets
     // that header): it builds txs on the current state, so it skips the cache. Everyone else, the
     // public page included, gets cached answers, so nobody can burn the shared quota by asking.
-    const fresh = !!auth.pkhOfToken(c.req.header("project_id"));
+    const pid = c.req.header("project_id");
+    const fresh = !!auth.pkhOfToken(pid) || (/^gnd_[0-9a-f]{64}$/.test(pid ?? "") && !!d.store.agentOfToken(sha256(pid!)));
     if (hit && !fresh && now() - hit.at < ttl(hit.status)) return c.body(hit.body, hit.status as 200, { "content-type": "application/json" });
     let res: Response;
     try {
@@ -142,6 +145,21 @@ export function createApp(d: {
       cacheBytes += body.length;
     }
     return c.body(body, res.status as 200, { "content-type": "application/json" });
+  });
+
+  // An agent connected by pairing has no Blockfrost key: it submits through us, and only its own allowance spend.
+  app.post("/chain/tx/submit", async (c) => {
+    const pid = c.req.header("project_id") ?? "";
+    const agent = /^gnd_[0-9a-f]{64}$/.test(pid) ? d.store.agentOfToken(sha256(pid)) : undefined;
+    if (!agent) return c.json({ error: "not allowed" }, 401);
+    if (limited(`submit:${clientIp(c)}`)) return c.json({ error: "too many requests" }, 429);
+    const cbor = Buffer.from(await c.req.arrayBuffer()).toString("hex");
+    const al = await d.allowanceOf(agent.policy, agent.unit);
+    if (!al) return c.json({ error: "this allowance isn't on chain any more" }, 403);
+    const problem = agentSpendProblem(cbor, agent.policy, al.ref, al.agent);
+    if (problem) return c.json({ error: problem }, 403);
+    const r = await d.submit(cbor);
+    return r.ok ? c.json(r.hash) : c.json({ error: r.error }, r.transient ? 503 : 400);
   });
 
   app.get("/public/:policy", (c) => {

@@ -51,6 +51,10 @@ const allowanceOf = async (policy: string, unit: string) => {
   const a = (await readVault(get, policy, network, Date.now()))?.allowances.find((x) => x.unit === unit);
   return a?.agent ? { ref: `${a.txHash}#${a.outputIndex}`, agent: a.agent } : undefined;
 };
+const allowanceForAgent = async (policy: string, agent: string) => {
+  const a = (await readVault(get, policy, network, Date.now()))?.allowances.find((x) => x.agent === agent);
+  return a ? { unit: a.unit, ref: `${a.txHash}#${a.outputIndex}` } : undefined;
+};
 const submit = async (cbor: string) => {
   try {
     const r = await fetch(`${url}/tx/submit`, {
@@ -66,10 +70,12 @@ const submit = async (cbor: string) => {
     return { ok: false as const, error: `couldn't reach the chain: ${(e as Error).message}`, transient: true };
   }
 };
-const app = createApp({ store: openStore(process.env.DB ?? "gendo.sqlite"), upstream: chain, owners, allowanceOf, submit, network, clientIp: clientIpFrom(process.env.CLIENT_IP_HEADER) });
+const app = createApp({ store: openStore(process.env.DB ?? "gendo.sqlite"), upstream: chain, owners, allowanceOf, allowanceForAgent, submit, network, clientIp: clientIpFrom(process.env.CLIENT_IP_HEADER) });
 const dir = resolve(process.env.STATIC_DIR ?? "../app/dist");
 app.use("/assets/*", serveStatic({ root: relative(process.cwd(), dir) }));
 app.get("/assets/*", (c) => c.text("not found", 404)); // a missing build file is a 404, never the page
+app.use("/dl/*", serveStatic({ root: relative(process.cwd(), dir) })); // gendo-agent install files
+app.get("/dl/*", (c) => c.text("not found", 404));
 const index = () => readFileSync(join(dir, "index.html"), "utf8");
 app.get("*", (c) => c.html(index())); // the app routes /w/… itself
 serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 8787) });

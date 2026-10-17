@@ -60,6 +60,30 @@ function escalationProblem(txCbor: string, policy: string, allowanceRef: string)
   return kind === "CoSignedSpend" ? undefined : "an escalation must use the CoSignedSpend redeemer";
 }
 
+/** An agent's own spend, the only tx the submit relay sends: its allowance's current UTxO, alone, with AgentSpend, signed by its key. */
+export function agentSpendProblem(txCbor: string, policy: string, allowanceRef: string, agent: string): string | undefined {
+  try {
+    const body = CML.Transaction.from_cbor_hex(txCbor).body();
+    if (body.inputs().len() !== 1) return "an agent spend has exactly one input, its allowance";
+    const i = body.inputs().get(0);
+    if (`${i.transaction_id().to_hex()}#${i.index()}` !== allowanceRef) return "this tx doesn't spend your allowance's current UTxO";
+    const scriptAddr = CML.EnterpriseAddress.new(0, CML.Credential.new_script(CML.ScriptHash.from_hex(policy))).to_address().to_bech32();
+    if (describeTx(txCbor, { vault: { hash: policy }, inputAddresses: { [allowanceRef]: scriptAddr } }).vaultSpends[allowanceRef] !== "AgentSpend")
+      return "only an ordinary agent spend goes through here; escalations go to the owners' inbox";
+    if (!requiredSignersOf(txCbor).includes(agent)) return "the agent key must sign";
+    return undefined;
+  } catch (e) {
+    return `not a transaction: ${(e as Error).message}`;
+  }
+}
+
+/** A fresh request token for an allowance (the previous one stops working). */
+export function newAgentToken(store: ReturnType<typeof openStore>, policy: string, unit: string, now: number): string {
+  const token = "gnd_" + randomBytes(32).toString("hex");
+  store.rotateAgentToken(sha256(token), policy, unit, now);
+  return token;
+}
+
 const ttlSlotOf = (txCbor: string) => {
   const t = CML.Transaction.from_cbor_hex(txCbor).body().ttl();
   return t === undefined ? undefined : Number(t);
@@ -308,9 +332,7 @@ export function mountPending(app: Hono, d: Deps, auth: Auth) {
     if (!unitOk(policy, unit)) return c.json({ error: "bad allowance id" }, 400);
     const who = await auth.ownerOf(c, policy);
     if (typeof who !== "string") return who;
-    const token = "gnd_" + randomBytes(32).toString("hex");
-    d.store.rotateAgentToken(sha256(token), policy, unit, d.now());
-    return c.json({ token });
+    return c.json({ token: newAgentToken(d.store, policy, unit, d.now()) });
   });
 
   app.put("/vaults/:policy/agents/:unit/label", async (c) => {
