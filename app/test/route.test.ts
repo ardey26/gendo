@@ -15,4 +15,5 @@ describe("routes", () => {
     for (const p of ["/w/xyz", "/v/abc", "/nope", `/v/${P}/agents/zz`]) expect(parseRoute(p)).toEqual({ page: "missing" });
   });
   it("/new is the create wizard", () => expect(parseRoute("/new")).toEqual({ page: "create" }));
+  it("/v/<policy>/connect connects an agent", () => expect(parseRoute(`/v/${P}/connect`)).toEqual({ page: "connect", policy: P }));
 });

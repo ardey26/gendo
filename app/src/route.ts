@@ -4,6 +4,7 @@ export type Route =
   | { page: "start" }
   | { page: "inbox" }
   | { page: "create" }
+  | { page: "connect"; policy: string }
   | { page: "vault"; policy: string; tab: "agents" | "activity" | "treasury" | "settings" }
   | { page: "agent"; policy: string; unit?: string }
   | { page: "missing" };
@@ -16,6 +17,7 @@ export function parseRoute(path: string): Route {
   if (p === "/") return { page: "start" };
   if (p === "/inbox") return { page: "inbox" };
   if (p === "/new") return { page: "create" };
+  if ((m = new RegExp(`^/v/${POLICY}/connect$`).exec(p))) return { page: "connect", policy: m[1]! };
   if ((m = new RegExp(`^/v/${POLICY}(?:/(agents|activity|treasury|settings))?$`).exec(p)))
     return { page: "vault", policy: m[1]!, tab: (m[2] as "agents" | "activity" | "treasury" | "settings") ?? "agents" };
   if ((m = new RegExp(`^/v/${POLICY}/agents/new$`).exec(p))) return { page: "agent", policy: m[1]! };

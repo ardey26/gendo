@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AllowanceDatum, Explanation } from "../../sdk/src/core/index.ts";
+import { confirmWords } from "../../sdk/src/core/pairing.ts";
 import { detailOf, sentence } from "../src/owner/diff.ts";
 import { needsConfirm } from "../src/owner/status.ts";
 
@@ -63,6 +64,11 @@ describe("detailOf", () => {
     expect(d.warnings).toEqual(["it removes you as an owner"]);
     expect(needsConfirm(d)).toBe(true);
   });
+  it("a grant from a pairing: the agent's collateral is named, not a mystery payment", () => {
+    const d = detailOf({ ...base, changes: [{ kind: "grant", unit: h(5) + "01", after: al(10_000_000n, 25_000_000n, 1), lovelace: 40_000_000n }],
+      flows: [{ address: "addr_test1vagent", delta: { lovelace: 5_000_000n } }] }, { ...ctx, agentAddress: (pkh: string) => (pkh === h(9) ? "addr_test1vagent" : "x") });
+    expect(d.money).toContainEqual({ label: "Collateral for the agent (stays in its own address)", value: "5 ADA" });
+  });
   it("sentence matches the public page's", () => expect(sentence(al(10_000_000n, 25_000_000n, 1), 1)).toBe("This agent can pay up to 10 ADA at a time and 25 ADA per day, only to this address, until 2026-11-30."));
   it("a creation: its owners and threshold, the reference script named, money into the vault", () => {
     const c = { owners: [h(1), h(2)], threshold: 2n, paused: false, maxTxValidityMs: 600_000n };
@@ -84,7 +90,7 @@ describe("detailOf", () => {
 describe("review screens show everything in full", () => {
   it("payees, owners and agent keys are never shortened; a payment to another script is not the treasury", () => {
     const d = detailOf({ ...base, changes: [{ kind: "grant", unit: h(5) + "02", after: al(5_000_000n, 20_000_000n, 1), lovelace: 30_000_000n }] }, ctx);
-    expect(d.rows).toContainEqual({ k: "Agent key", now: "—", next: h(9), changed: true });
+    expect(d.rows).toContainEqual({ k: "Agent key", now: "—", next: `${confirmWords(h(9))} · ${h(9)}`, changed: true });
     expect(d.rows).toContainEqual({ k: "Payee added", now: "—", next: "addr_test1q0", changed: true });
     const other = detailOf({ ...base, changes: [], flows: [{ address: "addr_test1wsomeotherscript", delta: { lovelace: 5_000_000n } }] }, ctx);
     expect(other.title).not.toBe("Fund the treasury");

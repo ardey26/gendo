@@ -6,6 +6,7 @@ import { SERVER_DOWN, api, session, type MyVault } from "./api.ts";
 import { openChain, readThroughSession } from "./chain.ts";
 import { consistentVaults } from "./vaults.ts";
 import { AgentEditor } from "./pages/AgentEditor.tsx";
+import { ConnectAgent } from "./pages/Connect.tsx";
 import { Create } from "./pages/Create.tsx";
 import { Inbox } from "./pages/Inbox.tsx";
 import { Connect, Start } from "./pages/Start.tsx";
@@ -98,6 +99,7 @@ export default function OwnerApp({ route, network }: { route: Route; network: Ne
       {route.page === "start" && <Start />}
       {route.page === "inbox" && <Inbox />}
       {route.page === "create" && <Create />}
+      {route.page === "connect" && <ConnectAgent policy={route.policy} />}
       {route.page === "vault" && <VaultPage policy={route.policy} tab={route.tab} />}
       {route.page === "agent" && <AgentEditor policy={route.policy} {...(route.unit ? { unit: route.unit } : {})} />}
       {route.page === "missing" && <div className="app" data-ready><p style={{ padding: 20 }}>Not found.</p></div>}

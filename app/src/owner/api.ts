@@ -53,6 +53,11 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return j as T;
 }
 
+export type Pairing = {
+  id: string; policy: string; name: string; expiresAt: number;
+  status: "open" | "claimed" | "confirmed" | "ready" | "expired" | "cancelled";
+  words?: string; agent?: string;
+};
 export type MyVault = { policy: string; vaultId: string; name: string | null; listed: boolean };
 export const api = {
   challenge: (address: string) => call<{ nonce: string; payload: string }>("POST", "/auth/challenge", { address }),
@@ -65,6 +70,10 @@ export const api = {
   propose: (policy: string, p: { cbor: string; witness: string; title: string; recipe: unknown }) => call<PendingView>("POST", `/vaults/${policy}/pending`, p),
   createVault: (p: { cbor: string; witness: string; name: string }) => call<{ pending: PendingView; vaultId: string; policy: string }>("POST", "/vaults", p),
   suggestedVaults: () => call<{ policy: string; vaultId: string; name: string | null }[]>("GET", "/me/suggested-vaults"),
+  createPairing: (policy: string, name: string) => call<{ id: string; code: string; expiresAt: number }>("POST", `/vaults/${policy}/pairings`, { name }),
+  pairing: (id: string) => call<Pairing>("GET", `/pairings/${id}`),
+  confirmPairing: (id: string) => call<Pairing>("POST", `/pairings/${id}/confirm`),
+  cancelPairing: (id: string) => call<Pairing>("POST", `/pairings/${id}/cancel`),
   sign: (id: string, witness: string) => call<PendingView>("POST", `/pending/${id}/witness`, { witness }),
   agentToken: (policy: string, unit: string) => call<{ token: string }>("POST", `/vaults/${policy}/agents/${unit}/token`, {}),
   setLabel: (policy: string, unit: string, name: string) => call<unknown>("PUT", `/vaults/${policy}/agents/${unit}/label`, { name }),

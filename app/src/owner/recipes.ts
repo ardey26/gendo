@@ -8,7 +8,7 @@ export type Recipe =
   | { op: "unpause"; signers: string[] }
   | { op: "config"; owners: string[]; threshold: bigint; signers: string[] }
   | { op: "edit"; unit: string; next: AllowanceDatum; topUp: bigint; signers: string[] }
-  | { op: "grant"; grant: Grant; signers: string[] }
+  | { op: "grant"; grant: Grant & { collateral?: bigint }; signers: string[] }
   | { op: "revoke"; unit: string; signers: string[] }
   | { op: "fund"; lovelace: bigint };
 
@@ -48,7 +48,8 @@ export async function buildRecipe(l: LucidEvolution, vault: Vault, r: Recipe, me
       return owner.editAllowance(l, vault, cfg, await readAllowance(l, vault, r.unit), r.next, r.signers, r.topUp > 0n ? { lovelace: r.topUp } : {});
     case "grant": {
       const fromTreasury = (r.grant.fund.lovelace ?? 0n) > 0n ? await treasuryUtxos(l, vault) : undefined;
-      return (await owner.grantAllowance(l, vault, cfg, r.grant, r.signers, fromTreasury ? { fromTreasury } : {})).tx;
+      const { collateral, ...grant } = r.grant;
+      return (await owner.grantAllowance(l, vault, cfg, grant, r.signers, { ...(fromTreasury ? { fromTreasury } : {}), ...(collateral ? { agentCollateral: collateral } : {}) })).tx;
     }
     case "revoke": {
       const al = (await listAllowances(l, vault)).find((a) => a.unit === r.unit);

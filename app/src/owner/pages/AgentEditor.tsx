@@ -30,6 +30,13 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
   const [err, setErr] = useState<string>();
   const [note, setNote] = useState<string>();
   const [token, setToken] = useState<string>();
+  // Arrived from "Connect an agent": the agent and its name come from the pairing, never typed.
+  const pairingId = unit ? null : new URLSearchParams(location.search).get("pairing");
+  const pairing = useLoad(async () => (pairingId ? api.pairing(pairingId) : undefined), [pairingId]);
+  useEffect(() => {
+    const p = pairing.data;
+    if (p?.agent) setF((x) => ({ ...x, name: p.name, agentKey: p.agent! }));
+  }, [pairing.data]);
 
   useEffect(() => {
     const d = loaded.data;
@@ -102,8 +109,10 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
       const grant = {
         agent: f.agentKey, destinations: f.payees, caps: [{ policy: "", name: "", windowCap: toLovelace(f.budget)!, txCap: toLovelace(f.perPayment)! }],
         periodMs: PERIOD_MS[f.period], windowStart: now - 120_000n, expiresAt, maxFee: 2_000_000n, fund: { lovelace: toLovelace(f.fund)! },
+        // A paired agent's own address starts empty; it needs a little ADA there as collateral.
+        ...(pairing.data?.agent ? { collateral: 5_000_000n } : {}),
       };
-      return propose({ op: "grant", grant, signers }, `Proposed ${f.name.trim()}. Name it once it lands.`);
+      return propose({ op: "grant", grant, signers }, pairing.data?.agent ? `Proposed. ${f.name.trim()} connects once it lands.` : `Proposed ${f.name.trim()}. Name it once it lands.`);
     }
   };
   const set = (k: keyof AgentForm) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
@@ -124,7 +133,13 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
         <section className="panel" style={{ flex: "999 1 480px", minWidth: 0 }}>
           <div className="ph"><h2>Allowance</h2><span className="cap">Changes need {threshold} of {d?.cfg.owners.length ?? "?"} owners</span></div>
           {field("aname", "Name", <input id="aname" value={f.name} onChange={set("name")} placeholder="payout-bot" />, "Only shown in the app and on the public page.")}
-          {!unit && field("akey", "Agent key hash", <input id="akey" value={f.agentKey} onChange={(e) => setF({ ...f, agentKey: e.target.value.trim() })} placeholder="56 hex characters" style={{ width: "100%" }} />, "The agent's ID. Whoever runs the agent makes it on the signer's machine with cli/vault keys gen agent and sends you the pkh it prints. The private key never leaves that machine.")}
+          {!unit && pairing.data?.agent && field("apaired", "Agent", <span><b>{pairing.data.name}</b> <span className="faint">({pairing.data.words}), connected from its own machine</span></span>, "It also gets 5 ADA in its own address: Cardano needs a little there as a safety deposit for every payment.")}
+          {!unit && !pairingId && (
+            <details className="field">
+              <summary style={{ cursor: "pointer" }}>Advanced: paste an agent key (for a separate signer)</summary>
+              {field("akey", "Agent key hash", <input id="akey" value={f.agentKey} onChange={(e) => setF({ ...f, agentKey: e.target.value.trim() })} placeholder="56 hex characters" style={{ width: "100%" }} />, "Whoever runs a separate signer makes the key on its machine with cli/vault keys gen agent and sends you the pkh it prints. Most people should use Connect an agent instead.")}
+            </details>
+          )}
           {field("cap", "Per-payment cap", <><input id="cap" value={f.perPayment} onChange={set("perPayment")} style={{ width: 120 }} /> <span className="faint">ADA</span></>, "Most the agent can pay in one payment.")}
           {field("budget", "Budget", <><input id="budget" value={f.budget} onChange={set("budget")} style={{ width: 120 }} /> <span className="faint">ADA per</span> <select aria-label="Budget period" value={f.period} onChange={(e) => { setPeriodTouched(true); set("period")(e); }}><option value="day">day</option><option value="week">week</option><option value="month">30 days</option></select></>)}
           {field("newPayee", "Approved payees", (

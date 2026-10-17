@@ -1,6 +1,7 @@
 // What a pending tx does, as the inbox shows it: computed only from explainTx's output
 // (the tx and hash-checked chain data). Server text never feeds these rows.
 import type { AllowanceDatum, ConfigDatum, Explanation } from "../../../sdk/src/core/index.ts";
+import { confirmWords } from "../../../sdk/src/core/pairing.ts";
 import { ada, periodName } from "../public/format.ts";
 
 export type Row = { k: string; now: string; next: string; changed: boolean };
@@ -11,6 +12,8 @@ export type Ctx = {
   vaultAddress: string;
   /** Where a new vault parks its reference script (always-fail: locked for good). */
   refHolder?: string;
+  /** A key's own (enterprise) address: where a new agent's collateral goes. */
+  agentAddress?: (pkh: string) => string;
   labels: Record<string, string>;
   payeesOf: (d: AllowanceDatum) => string[];
   isMine: (address: string) => boolean;
@@ -42,7 +45,7 @@ function allowanceRows(a: AllowanceDatum | null, b: AllowanceDatum | null, ctx: 
     ["Payees", (d: AllowanceDatum) => String(ctx.payeesOf(d).length)],
     ["Expires", (d: AllowanceDatum) => day(d.expiresAt)],
     ["Max fee", (d: AllowanceDatum) => `${ada(d.maxFee)} ADA`],
-    ["Agent key", (d: AllowanceDatum) => d.agent],
+    ["Agent key", (d: AllowanceDatum) => `${confirmWords(d.agent)} · ${d.agent}`],
   ].map(([k, f]) => {
     const now = v(a, f as (d: AllowanceDatum) => string);
     const next = v(b, f as (d: AllowanceDatum) => string);
@@ -76,9 +79,14 @@ export function detailOf(e: Explanation, ctx: Ctx): Detail {
   const money: Detail["money"] = [];
   if (Object.keys(e.leavesVault).length) money.push({ label: "Leaves the vault", value: qty(e.leavesVault) });
   const isVault = (a: string) => a === ctx.vaultAddress;
+  const granted = e.changes.find((c) => c.kind === "grant");
+  const agentAddr = granted?.kind === "grant" && granted.after ? ctx.agentAddress?.(granted.after.agent) : undefined;
+  const labelOf = (a: string) =>
+    a === ctx.refHolder ? "Reference script (locked for good; it lowers every agent payment's fee)"
+      : a === agentAddr ? "Collateral for the agent (stays in its own address)"
+      : `To ${a}`;
   for (const f of e.flows)
-    if (!ctx.isMine(f.address) && !isVault(f.address) && (f.delta.lovelace ?? 0n) > 0n)
-      money.push({ label: f.address === ctx.refHolder ? "Reference script (locked for good; it lowers every agent payment's fee)" : `To ${f.address}`, value: qty(f.delta) });
+    if (!ctx.isMine(f.address) && !isVault(f.address) && (f.delta.lovelace ?? 0n) > 0n) money.push({ label: labelOf(f.address), value: qty(f.delta) });
   const intoVault = e.flows.find((f) => isVault(f.address))?.delta.lovelace ?? 0n;
   if (intoVault > 0n) money.push({ label: "Into the vault", value: `${ada(intoVault)} ADA` });
   const mine = e.flows.filter((f) => ctx.isMine(f.address)).reduce((n, f) => n - (f.delta.lovelace ?? 0n), 0n);

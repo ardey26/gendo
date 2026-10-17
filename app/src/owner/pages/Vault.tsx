@@ -84,7 +84,7 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
         <ErrorNote error={err ?? data.error} />
         {view && tab === "agents" && (
           <section className="panel">
-            <div className="ph"><h2>Agents</h2><Link to={`/v/${policy}/agents/new`} className="btn">Add agent</Link></div>
+            <div className="ph"><h2>Agents</h2><div style={{ display: "flex", gap: 8 }}><Link to={`/v/${policy}/agents/new`} className="btn">Add by agent key</Link><Link to={`/v/${policy}/connect`} className="btn pri">Connect an agent</Link></div></div>
             <div className="scroll">
               <table className="t" style={{ minWidth: 900 }}>
                 <thead><tr><th>Agent</th><th>Status</th><th>Spent / budget</th><th>Per payment</th><th>Payees</th><th>Expires</th><th /></tr></thead>
