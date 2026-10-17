@@ -123,6 +123,11 @@ describe("an agent connected by pairing", async () => {
     expect((await post(await signed(other, otherUnit))).status).toBe(403); // another agent's allowance
     expect((await post(await signed(agent, unit, true))).status).toBe(403); // an escalation goes through the inbox
     expect((await post("00", "gnd_" + "0".repeat(64))).status).toBe(401);
+    // Behind Caddy, which drops header names with underscores, the token arrives as X-Project-Id.
+    const viaProxy = await app.request("/chain/tx/submit", { method: "POST", headers: { "x-project-id": token!, "content-type": "application/cbor" }, body: Buffer.from("00", "hex") });
+    expect(viaProxy.status).toBe(403); // the token is recognized; the junk tx is what's refused
+    // Refusals use Blockfrost's error shape, so Lucid passes the reason through instead of "Could not submit transaction."
+    expect(await viaProxy.json()).toMatchObject({ status_code: 400, error: "Bad Request", message: expect.stringMatching(/not a transaction/) });
     expect(submitted).toHaveLength(1);
   });
 });

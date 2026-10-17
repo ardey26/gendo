@@ -60,7 +60,7 @@ const tick = () => (opening ??= refresh().catch((e) => void (conn = { status: "e
 /** The server stopped taking our token (an owner issued a new one): ask for a fresh one with a signed request. */
 const onResult = (r: unknown) => {
   const x = r as { status?: string; reason?: string; code?: string };
-  if (x.status === "blocked" && /not allowed|bad agent token|\b401\b/i.test(`${x.reason ?? ""} ${x.code ?? ""}`)) {
+  if (x.status === "blocked" && /not allowed|bad agent token|doesn't recognize this agent's token|\b401\b/i.test(`${x.reason ?? ""} ${x.code ?? ""}`)) {
     session = undefined;
     needToken = true;
   }

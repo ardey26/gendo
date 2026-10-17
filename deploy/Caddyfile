@@ -3,5 +3,7 @@
 	reverse_proxy 127.0.0.1:8787 {
 		# Overwrites anything the visitor sent, so the rate limit can't be dodged.
 		header_up X-Real-IP {remote_host}
+		# Caddy drops header names with underscores; Lucid's Blockfrost client sends the key as project_id.
+		header_up X-Project-Id {http.request.header.project_id}
 	}
 }

@@ -40,6 +40,14 @@ export function clientIpFrom(header?: string) {
   return (c: Context) => (header && c.req.header(header)?.split(",")[0]?.trim()) || remoteIp(c);
 }
 
+/** Lucid's Blockfrost client sends the key as `project_id`; Caddy drops header names with underscores, so
+ * behind it the same value arrives as X-Project-Id (the Caddyfile copies it). */
+const projectIdOf = (c: Context) => c.req.header("project_id") ?? c.req.header("x-project-id");
+
+/** An error in Blockfrost's shape: Lucid passes `message` on to the agent instead of a generic failure. */
+const bfError = (c: Context, status: 400 | 401 | 403 | 429 | 503, message: string) =>
+  c.json({ status_code: 400, error: "Bad Request", message }, status);
+
 export function createApp(d: {
   upstream: (pathAndQuery: string) => Promise<Response>;
   store: ReturnType<typeof openStore>;
@@ -133,7 +141,7 @@ export function createApp(d: {
     // A signed-in owner's app sends its session token as project_id (Lucid's Blockfrost client sets
     // that header): it builds txs on the current state, so it skips the cache. Everyone else, the
     // public page included, gets cached answers, so nobody can burn the shared quota by asking.
-    const pid = c.req.header("project_id");
+    const pid = projectIdOf(c);
     const agentToken = /^gnd_[0-9a-f]{64}$/.test(pid ?? "") && !!d.store.agentOfToken(sha256(pid!));
     if (agentToken && agentLimited(sha256(pid!))) return c.json({ error: "too many requests" }, 429);
     const fresh = !!auth.pkhOfToken(pid) || agentToken;
@@ -162,17 +170,18 @@ export function createApp(d: {
 
   // An agent connected by pairing has no Blockfrost key: it submits through us, and only its own allowance spend.
   app.post("/chain/tx/submit", async (c) => {
-    const pid = c.req.header("project_id") ?? "";
+    const pid = projectIdOf(c) ?? "";
     const agent = /^gnd_[0-9a-f]{64}$/.test(pid) ? d.store.agentOfToken(sha256(pid)) : undefined;
-    if (!agent) return c.json({ error: "not allowed" }, 401);
-    if (limited(`submit:${clientIp(c)}`) || agentLimited(sha256(pid))) return c.json({ error: "too many requests" }, 429);
+    if (!agent) return bfError(c, 401, "the gendo server doesn't recognize this agent's token");
+    if (limited(`submit:${clientIp(c)}`) || agentLimited(sha256(pid))) return bfError(c, 429, "too many requests; wait a minute");
     const cbor = Buffer.from(await c.req.arrayBuffer()).toString("hex");
     const al = await d.allowanceOf(agent.policy, agent.unit);
-    if (!al) return c.json({ error: "this allowance isn't on chain any more" }, 403);
+    if (!al) return bfError(c, 403, "this allowance isn't on chain any more");
     const problem = agentSpendProblem(cbor, agent.policy, al.ref, al.agent);
-    if (problem) return c.json({ error: problem }, 403);
+    if (problem) return bfError(c, 403, problem);
     const r = await d.submit(cbor);
-    return r.ok ? c.json(r.hash) : c.json({ error: r.error }, r.transient ? 503 : 400);
+    if (!r.ok) console.error(`agent submit refused by the chain (${agent.unit.slice(56, 64)}): ${r.error.slice(0, 300)}`);
+    return r.ok ? c.json(r.hash) : bfError(c, r.transient ? 503 : 400, `the chain refused it: ${r.error.slice(0, 500)}`);
   });
 
   app.get("/public/:policy", (c) => {
