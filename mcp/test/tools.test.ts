@@ -17,4 +17,14 @@ describe("tools before ready", () => {
       expect(JSON.parse((r.content as { text: string }[])[0]!.text)).toEqual({ status: "not_ready", message: "Paired as blue-otter-42; waiting for a budget." });
     }
   });
+  it("hands each result to the caller's hook (gendo-agent reconnects when its token stopped working)", async () => {
+    const server = new McpServer({ name: "t", version: "0" });
+    const seen: unknown[] = [];
+    registerTools(server, async () => ({ notReady: "x" }), (r) => seen.push(r));
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "c", version: "0" });
+    await Promise.all([server.connect(a), client.connect(b)]);
+    await client.callTool({ name: "get_budget", arguments: {} });
+    expect(seen).toEqual([{ status: "not_ready", message: "x" }]);
+  });
 });

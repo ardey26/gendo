@@ -15,7 +15,8 @@ import { loadState, saveState } from "./state.js";
 
 export type SignerCoreOptions = {
   privateKey: string;
-  policy: SignerPolicy;
+  /** Fixed (the daemon's config file) or read fresh for every tx (gendo-agent: the allowance as it is now). */
+  policy: SignerPolicy | (() => Promise<SignerPolicy>);
   /** JSON file for counters + intent table. Without it, state is in memory only (tests). */
   statePath?: string;
   auditLog?: string;
@@ -34,9 +35,13 @@ export function witnessFor(txCbor: string, privateKey: string): string {
 
 /** Signs only what the policy allows; a refusal throws `signer refused: <reason>`, as the socket client does. */
 export function createSigner(opts: SignerCoreOptions): { sign(txCbor: string): Promise<string> } {
-  const vaultHash = CML.Address.from_bech32(opts.policy.vaultAddress).payment_cred()?.as_script()?.to_hex();
-  if (!vaultHash) throw new Error("policy.vaultAddress is not a script address");
-  const vault = { hash: vaultHash };
+  const policyNow = async () => (typeof opts.policy === "function" ? opts.policy() : opts.policy);
+  const vaultOf = (policy: SignerPolicy) => {
+    const hash = CML.Address.from_bech32(policy.vaultAddress).payment_cred()?.as_script()?.to_hex();
+    if (!hash) throw new Error("policy.vaultAddress is not a script address");
+    return { hash };
+  };
+  if (typeof opts.policy !== "function") vaultOf(opts.policy); // a bad fixed policy fails at start, as before
   const state = loadState(opts.statePath);
   const now = opts.now ?? Date.now;
   const audit = (entry: object) => {
@@ -49,13 +54,15 @@ export function createSigner(opts: SignerCoreOptions): { sign(txCbor: string): P
 
   async function decide(txCbor: string): Promise<string> {
     const t = now();
+    const policy = await policyNow();
+    const vault = vaultOf(policy);
     let facts: ReturnType<typeof factsOf>;
     let intentId: string;
     try {
-      facts = factsOf(txCbor, opts.policy.slot);
+      facts = factsOf(txCbor, policy.slot);
       // Attribute the single input to the vault so describeTx reads the vault's own redeemer.
       // `evaluate` below refuses any tx where that input isn't the configured allowance.
-      const inputAddresses = facts.inputs.length === 1 ? { [`${facts.inputs[0]!.txHash}#${facts.inputs[0]!.index}`]: opts.policy.vaultAddress } : {};
+      const inputAddresses = facts.inputs.length === 1 ? { [`${facts.inputs[0]!.txHash}#${facts.inputs[0]!.index}`]: policy.vaultAddress } : {};
       const intent = describeTx(txCbor, { vault, inputAddresses }).intent; // verified against the redeemer hash
       if (!intent?.id) return refuse(facts.hash, "tx carries no verifiable intent record");
       intentId = intent.id;
@@ -71,7 +78,7 @@ export function createSigner(opts: SignerCoreOptions): { sign(txCbor: string): P
     if (!dedupe.ok) return refuse(facts.hash, dedupe.reason);
 
     const reSign = prev?.hash === facts.hash; // same body: don't count it twice
-    const decision = evaluate(opts.policy, reSign ? { ...state, signed: [] } : state, txCbor, t);
+    const decision = evaluate(policy, reSign ? { ...state, signed: [] } : state, txCbor, t);
     if (!decision.ok) return refuse(facts.hash, decision.reason);
 
     if (!reSign) {

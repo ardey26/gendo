@@ -6,14 +6,14 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { blockfrostQuery, makeVault, parseVaultId, readAllowance } from "../../sdk/src/core/index.js";
-import { createSigner, policyFromAllowance } from "../../sdk/src/node/signer/core.js";
+import { blockfrostQuery, confirmWords, makeVault, parseVaultId, readAllowance } from "../../sdk/src/core/index.js";
 import { sessionFromParts, type AgentSession } from "../../sdk/src/node/session.js";
 import { McpServer, StdioServerTransport } from "../../mcp/src/runtime.js";
 import { registerTools } from "../../mcp/src/tools.js";
 import { openChain } from "./chain.js";
 import { openHome } from "./home.js";
 import { step, type Connection } from "./pair.js";
+import { pairedSigner } from "./signer.js";
 
 console.log = (...a: unknown[]) => console.error(...a); // stdout carries the protocol
 
@@ -27,31 +27,44 @@ const h = openHome(v.home ?? join(homedir(), ".gendo", "agents"), code, v.server
 
 let conn: Connection = { status: "unknown", message: "Connecting to gendo…" };
 let session: AgentSession | undefined;
+let needToken = false;
 let opening: Promise<void> | undefined;
 
-/** Move the pairing along; once the budget has landed, open the session (once). */
+/** Move the pairing along; once the budget has landed, open the session (once, reusing the stored token). */
 async function refresh() {
   if (session) return;
-  conn = await step(h);
-  if (conn.status !== "ready" || !h.state.ready) return;
-  const { vaultId, unit, token } = h.state.ready;
+  if (!h.state.ready?.token || needToken) {
+    conn = await step(h, fetch, { wantToken: needToken });
+    if (conn.status !== "ready") return;
+    needToken = false;
+  }
+  const { vaultId, unit, token } = h.state.ready!;
   const id = parseVaultId(vaultId);
   const lucid = await openChain(h.state.server, id.network as "Preprod" | "Custom", token);
   const vault = makeVault(id.network, id.seed);
-  const al = await readAllowance(lucid, vault, unit);
+  const q = blockfrostQuery(`${h.state.server.replace(/\/$/, "")}/chain`, token);
   const slot = { zeroTime: lucid.slotToUnixTime(0), zeroSlot: 0, slotLength: lucid.slotToUnixTime(1) - lucid.slotToUnixTime(0) };
-  const signer = createSigner({ privateKey: h.sk, policy: policyFromAllowance({ datum: al.datum, unit, vault, network: id.network, slot }), statePath: join(h.dir, "signer.json") });
+  // Its rules are read from the allowance for every payment (owners' edits apply at once), and the chain
+  // is asked about an earlier tx for the same intent (a payment that never landed can be built again).
+  const signer = pairedSigner({
+    privateKey: h.sk, unit, vault, network: id.network, slot, chain: q, statePath: join(h.dir, "signer.json"),
+    readDatum: async () => (await readAllowance(lucid, vault, unit)).datum,
+  });
   // request_approval sends escalations to the owners' inbox with these.
   process.env.GENDO_SERVER = h.state.server;
   process.env.GENDO_AGENT_TOKEN = token;
-  session = sessionFromParts({
-    lucid, vault, unit, home: h.dir,
-    q: blockfrostQuery(`${h.state.server.replace(/\/$/, "")}/chain`, token),
-    sign: (cbor) => signer.sign(cbor),
-    ...(id.refScript ? { refScript: id.refScript } : {}),
-  });
+  session = sessionFromParts({ lucid, vault, unit, home: h.dir, q, sign: (cbor) => signer.sign(cbor), ...(id.refScript ? { refScript: id.refScript } : {}) });
+  conn = { status: "ready", words: confirmWords(h.pkh), message: `Connected (${confirmWords(h.pkh)}). Ready to pay within its budget.` };
 }
 const tick = () => (opening ??= refresh().catch((e) => void (conn = { status: "error", message: (e as Error).message })).finally(() => (opening = undefined)));
+/** The server stopped taking our token (an owner issued a new one): ask for a fresh one with a signed request. */
+const onResult = (r: unknown) => {
+  const x = r as { status?: string; reason?: string; code?: string };
+  if (x.status === "blocked" && /not allowed|bad agent token|\b401\b/i.test(`${x.reason ?? ""} ${x.code ?? ""}`)) {
+    session = undefined;
+    needToken = true;
+  }
+};
 
 const server = new McpServer(
   { name: "gendo", version: "0.1.0" },
@@ -74,13 +87,17 @@ server.registerTool(
   },
   async () => {
     await tick();
-    return { content: [{ type: "text" as const, text: JSON.stringify({ ...conn, ...(session ? { status: "ready" } : {}) }, null, 2) }] };
+    return { content: [{ type: "text" as const, text: JSON.stringify(conn, null, 2) }] };
   },
 );
-registerTools(server, async () => {
-  await tick();
-  return session ?? { notReady: conn.message };
-});
+registerTools(
+  server,
+  async () => {
+    await tick();
+    return session ?? { notReady: conn.message };
+  },
+  onResult,
+);
 
 await server.connect(new StdioServerTransport());
 void tick();

@@ -13,11 +13,16 @@ const payment = {
   purpose: z.string().describe("Short human-readable reason, recorded on-chain with the payment"),
 };
 
-/** `session` resolves to the agent's session, or to why it isn't ready yet (gendo-agent before its budget lands). */
-export function registerTools(server: McpServer, session: () => Promise<AgentSession | { notReady: string }>) {
+/**
+ * `session` resolves to the agent's session, or to why it isn't ready yet (gendo-agent before its budget lands).
+ * `onResult` sees every tool result (gendo-agent reconnects when the server stops accepting its token).
+ */
+export function registerTools(server: McpServer, session: () => Promise<AgentSession | { notReady: string }>, onResult?: (r: unknown) => void) {
   const ready = async <T>(run: (s: AgentSession) => Promise<T>) => {
     const s = await session();
-    return "notReady" in s ? json({ status: "not_ready", message: s.notReady }) : json(await run(s));
+    const out = "notReady" in s ? { status: "not_ready", message: s.notReady } : await run(s);
+    onResult?.(out);
+    return json(out);
   };
 
   server.registerTool(
