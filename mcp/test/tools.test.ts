@@ -1,0 +1,20 @@
+// Before the budget lands, every tool answers "not ready" with the reason instead of failing.
+import { describe, expect, it } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { registerTools } from "../src/tools.js";
+
+describe("tools before ready", () => {
+  it("pay and get_budget answer not_ready with the connection message", async () => {
+    const server = new McpServer({ name: "t", version: "0" });
+    registerTools(server, async () => ({ notReady: "Paired as blue-otter-42; waiting for a budget." }));
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "c", version: "0" });
+    await Promise.all([server.connect(a), client.connect(b)]);
+    for (const [name, args] of [["pay", { to: "addr_test1x", amount_ada: 1, intent_id: "I", purpose: "p" }], ["get_budget", {}]] as const) {
+      const r = await client.callTool({ name, arguments: args });
+      expect(JSON.parse((r.content as { text: string }[])[0]!.text)).toEqual({ status: "not_ready", message: "Paired as blue-otter-42; waiting for a budget." });
+    }
+  });
+});

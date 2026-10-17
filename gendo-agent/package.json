@@ -1,0 +1,11 @@
+{
+  "name": "@gendo-cash/agent",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Connect an AI agent to a gendo budget: an MCP server with its own key, paired from the gendo app.",
+  "bin": { "gendo-agent": "dist/main.mjs" },
+  "files": ["dist"],
+  "engines": { "node": ">=22" },
+  "dependencies": { "@lucid-evolution/lucid": "0.6.5" }
+}

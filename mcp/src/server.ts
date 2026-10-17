@@ -9,8 +9,8 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
-import { budget, openSession, pay, requestApproval } from "../../sdk/src/node/session.js";
+import { openSession } from "../../sdk/src/node/session.js";
+import { registerTools } from "./tools.js";
 
 // stdout carries the protocol; anything else printed there would corrupt it.
 console.log = (...a: unknown[]) => console.error(...a);
@@ -37,48 +37,7 @@ const server = new McpServer(
   },
 );
 
-const json = (x: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(x, null, 2) }] });
-
-const payment = {
-  to: z.string().describe("Payee's exact Cardano address (addr_test1...). Must be on the approved list."),
-  amount_ada: z.number().positive().describe("Amount in ADA, e.g. 4.5"),
-  intent_id: z.string().min(1).describe("Stable id of what you're paying, e.g. the invoice number. Reuse it on retries."),
-  purpose: z.string().describe("Short human-readable reason, recorded on-chain with the payment"),
-};
-
-server.registerTool(
-  "get_budget",
-  {
-    title: "Check the budget",
-    description: "What you may spend right now: per-payment and per-period limits, what's left this period, when it resets, approved payees, expiry, and whether the owners paused spending.",
-    annotations: { readOnlyHint: true, openWorldHint: true },
-  },
-  async () => json(await budget(s)),
-);
-
-server.registerTool(
-  "pay",
-  {
-    title: "Pay from the allowance",
-    description:
-      "Pay an approved payee within the limits. Returns paid, already_paid (this intent_id was paid before; nothing new was sent), or blocked with a code and the next step. Over-limit amounts are blocked by the chain; use request_approval for those.",
-    inputSchema: payment,
-    annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true },
-  },
-  async (args) => json(await pay(s, args)),
-);
-
-server.registerTool(
-  "request_approval",
-  {
-    title: "Ask the owners to approve a payment",
-    description:
-      "For a payment over your limits. Prepares it for the vault owners to sign on their own machines and returns the file to hand them. Nothing is paid until they sign.",
-    inputSchema: { ...payment, reason: z.string().describe("Why this payment should exceed the limits") },
-    annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true },
-  },
-  async (args) => json(await requestApproval(s, args)),
-);
+registerTools(server, async () => s);
 
 await server.connect(new StdioServerTransport());
 console.error(`gendo MCP server ready (allowance ${s.unit.slice(0, 12)}…, vault ${s.vault.address})`);
