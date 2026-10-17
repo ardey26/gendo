@@ -45,7 +45,7 @@ function allowanceRows(a: AllowanceDatum | null, b: AllowanceDatum | null, ctx: 
     ["Payees", (d: AllowanceDatum) => String(ctx.payeesOf(d).length)],
     ["Expires", (d: AllowanceDatum) => day(d.expiresAt)],
     ["Max fee", (d: AllowanceDatum) => `${ada(d.maxFee)} ADA`],
-    ["Agent key", (d: AllowanceDatum) => `${confirmWords(d.agent)} · ${d.agent}`],
+    ["Agent key", (d: AllowanceDatum) => `${confirmWords(d.agent)} (${d.agent})`],
   ].map(([k, f]) => {
     const now = v(a, f as (d: AllowanceDatum) => string);
     const next = v(b, f as (d: AllowanceDatum) => string);

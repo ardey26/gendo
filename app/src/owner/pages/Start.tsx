@@ -86,7 +86,7 @@ export function Start() {
     }
   };
   return (
-    <Shell title={<span style={{ fontWeight: 700, fontSize: 15 }}>Your agent wallets</span>} actions={<Link to="/new" className="btn pri">Create a vault</Link>}>
+    <Shell title={<span style={{ fontWeight: 700, fontSize: 15 }}>All vaults</span>} actions={<Link to="/new" className="btn pri">Create a vault</Link>}>
       <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }} data-ready>
         <section className="panel">
           <div className="scroll">

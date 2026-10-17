@@ -120,7 +120,7 @@ export function PublicPage({ policy, network }: { policy: string; network: ReadN
                         <td style={{ minWidth: 180 }}>
                           {l && a.status === "active" ? (
                             <>
-                              <div className="mono" style={{ marginBottom: 6 }}>{ada(l.spentThisPeriod)} / {ada(l.perPeriod)} ADA · {ada(l.leftThisPeriod)} of {ada(l.perPeriod)} ADA left this period</div>
+                              <div className="mono" style={{ marginBottom: 6 }}>{ada(l.spentThisPeriod)} of {ada(l.perPeriod)} ADA spent, {ada(l.leftThisPeriod)} ADA left this period</div>
                               <div className="bar" role="img" aria-label={`${ada(l.spentThisPeriod)} of ${ada(l.perPeriod)} ADA spent`}><i style={{ width: `${Math.min(100, pct)}%` }} /></div>
                             </>
                           ) : "—"}

@@ -72,7 +72,7 @@ export function ConnectAgent({ policy }: { policy: string }) {
       <span>Connect an agent</span>
     </>
   );
-  if (!mine) return <Shell title="Connect an agent"><div style={{ padding: 20 }} data-ready><p>Add this vault on the <Link to="/">start page</Link> first.</p></div></Shell>;
+  if (!mine) return <Shell title="Connect an agent"><div style={{ padding: 20 }} data-ready><p>Add this vault on <Link to="/vaults">All vaults</Link> first.</p></div></Shell>;
 
   const origin = location.origin;
   const left = step.at === "code" ? Math.max(0, Math.floor((step.expiresAt - now) / 1000)) : 0;

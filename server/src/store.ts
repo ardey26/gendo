@@ -24,7 +24,7 @@ export function openStore(path: string) {
   // Which vaults each key added to its app: the inbox only shows those.
   db.exec("create table if not exists user_vaults (pkh text not null, policy text not null, vault_id text not null, primary key (pkh, policy))");
   const addUserVault = db.prepare("insert into user_vaults (pkh, policy, vault_id) values (?, ?, ?) on conflict(pkh, policy) do update set vault_id = excluded.vault_id");
-  const userVaults = db.prepare("select policy, vault_id from user_vaults where pkh = ?");
+  const userVaults = db.prepare("select policy, vault_id from user_vaults where pkh = ? order by rowid desc");
   db.exec(`create table if not exists pending (
     id text primary key, policy text not null, kind text not null, title text not null, cbor text not null,
     body_hash text not null, recipe text, required text not null, created_by text not null, created_at integer not null,

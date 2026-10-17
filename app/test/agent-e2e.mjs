@@ -16,9 +16,9 @@ const A = await browser(9351);
 const B = await browser(9352);
 let client;
 const signIn = async (b, key) => {
-  await b.open(`${APP}/?testwallet=${key}`);
+  await b.open(`${APP}/vaults?testwallet=${key}`);
   await b.click(/Test wallet\s+Detected/);
-  await b.waitText(/Your agent wallets/);
+  await b.waitText(/All vaults/);
 };
 const tool = async (name, args = {}) => JSON.parse((await client.callTool({ name, arguments: args })).content[0].text);
 const until = async (name, want, ms) => {
@@ -56,7 +56,7 @@ try {
   await A.click(/^I've read the warnings$/, 3_000).catch(() => undefined);
   await A.click(/^Sign with wallet$/);
   await A.waitText(/My Claude connects once it lands/);
-  await B.open(`${APP}/inbox`);
+  await B.open(`${APP}/`);
   await B.waitText(/Add My Claude/);
   await B.click(/^Sign with wallet$/);
   await B.waitText(/Waiting for the chain|Landed/);

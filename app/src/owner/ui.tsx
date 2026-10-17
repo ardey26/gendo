@@ -4,9 +4,10 @@ import { navigate } from "../route.ts";
 import { Mark, Netband } from "../ui/Brand.tsx";
 import type { MyVault } from "./api.ts";
 import type { Net } from "./types.ts";
-import type { Connected } from "./wallet.ts";
+import { sidebarVaults } from "./vaults.ts";
+import { wallets, type Connected } from "./wallet.ts";
 
-export type Owner = { net: Net; lucid: LucidEvolution; me: Connected; vaults: MyVault[]; reloadVaults(): Promise<void>; inboxCount: number; reloadInbox(): Promise<void>; signOut(): void };
+export type Owner = { net: Net; lucid: LucidEvolution; me: Connected; vaults: MyVault[]; reloadVaults(): Promise<void>; needYou: Record<string, number>; inboxCount: number; reloadInbox(): Promise<void>; signOut(): void };
 export const OwnerCtx = createContext<Owner | null>(null);
 export const useOwner = () => useContext(OwnerCtx)!;
 
@@ -96,37 +97,70 @@ export function Signers({ owners, threshold, me, value, onChange }: { owners: st
 
 export function Shell({ policy, tab, title, actions, children }: { policy?: string; tab?: string; title: ReactNode; actions?: ReactNode; children: ReactNode }) {
   const o = useOwner();
-  const v = policy ? o.vaults.find((x) => x.policy === policy) : undefined;
-  const nav = (to: string, label: string, on: boolean, extra?: ReactNode) => (
-    <Link to={to} className={on ? "nav on" : "nav"}>{label}{extra}</Link>
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    addEventListener("keydown", esc);
+    return () => removeEventListener("keydown", esc);
+  }, [open]);
+  const path = location.pathname;
+  const count = (n?: number) => (n ? <span className="count">{n}</span> : null);
+  const nav = (to: string, label: ReactNode, on: boolean, extra?: ReactNode, cls = "nav") => (
+    <Link key={to} to={to} className={on ? `${cls} on` : cls}>{label}{extra}</Link>
   );
+  const shown = sidebarVaults(o.vaults, o.needYou, policy);
+  const icon = wallets().find((w) => w.id === o.me.id)?.icon;
+  const walletName = o.me.name ? o.me.name[0]!.toUpperCase() + o.me.name.slice(1) : "Wallet";
   return (
     <div className="app frame">
       <Netband />
+      <div className="mbar">
+        <Link to="/" className="brand"><Mark /><span>gendo</span></Link>
+        <button type="button" className="menu" aria-label="Menu" aria-expanded={open} onClick={() => setOpen(true)}>
+          {o.inboxCount ? <span className="count">{o.inboxCount}</span> : null}
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M3.5 6h13M3.5 10h13M3.5 14h13" /></svg>
+        </button>
+      </div>
       <div className="shell">
-        <nav className="side" aria-label="Main">
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 10px 12px" }}><Mark /><span style={{ fontWeight: 900, fontSize: 15 }}>gendo</span></div>
-          <div className="sidecap cap">Inbox</div>
-          {nav("/inbox", "Needs you", location.pathname === "/inbox", o.inboxCount ? <span className="count">{o.inboxCount}</span> : null)}
-          {policy && (
-            <>
-              <div className="sidecap cap">{v?.name ?? short(policy)}</div>
-              {(["agents", "activity", "treasury", "settings"] as const).map((t) => nav(`/v/${policy}/${t}`, t[0]!.toUpperCase() + t.slice(1), tab === t))}
-              <a className="nav" href={`/w/${policy}`}>Public page</a>
-            </>
-          )}
-          <div className="sidecap cap">Account</div>
-          {nav("/", "All vaults", location.pathname === "/")}
-          {nav("/new", "Create a vault", location.pathname === "/new")}
+        {open && <div className="scrim" onClick={() => setOpen(false)} />}
+        <nav className={open ? "side open" : "side"} aria-label="Main" onClick={(e) => (e.target as HTMLElement).closest("a") && setOpen(false)}>
+          <div className="brandrow">
+            <Link to="/" className="brand"><Mark /><span>gendo</span></Link>
+            <button type="button" className="menu close" aria-label="Close menu" onClick={() => setOpen(false)}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" /></svg>
+            </button>
+          </div>
+          {nav("/", "Needs you", path === "/", count(o.inboxCount))}
+          <div className="sidecap cap">Vaults</div>
+          {shown.map((v) => (
+            <div key={v.policy}>
+              {nav(`/v/${v.policy}`, <span className="vname">{v.name ?? "Unnamed vault"}</span>, false, count(o.needYou[v.policy]), v.policy === policy ? "nav cur" : "nav")}
+              {v.policy === policy && (
+                <div className="subnav">
+                  {(["agents", "activity", "treasury", "settings"] as const).map((t) => nav(`/v/${policy}/${t}`, t[0]!.toUpperCase() + t.slice(1), tab === t))}
+                  <a className="nav" href={`/w/${policy}`}>Public page</a>
+                </div>
+              )}
+            </div>
+          ))}
+          {!o.vaults.length && <span className="faint" style={{ padding: "4px 10px", fontSize: 12 }}>No vaults yet.</span>}
+          {nav("/vaults", <>View all vaults{o.vaults.length > shown.length ? <span className="faint">{o.vaults.length}</span> : null}</>, path === "/vaults", undefined, "nav more")}
+          {nav("/new", "Create a vault", path === "/new", undefined, "nav more")}
           <div style={{ flexGrow: 1, minHeight: 16 }} />
-          <div style={{ borderTop: "1px solid #2a241e", padding: "12px 10px 4px", display: "flex", flexDirection: "column", gap: 6 }}>
-            <span className="mono" style={{ fontSize: 12 }}>{short(o.me.address)}</span>
-            <span className="faint" style={{ fontSize: 12 }}>{o.me.name}</span>
-            <button type="button" className="btn" onClick={o.signOut} style={{ alignSelf: "flex-start", minHeight: 26, padding: "2px 8px", fontSize: 12 }}>Disconnect</button>
+          <div className="who">
+            {icon ? <img src={icon} alt="" width={28} height={28} /> : <span className="wico" aria-hidden="true">{walletName[0]}</span>}
+            <span style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
+              <span className="mono" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={o.me.address}>{short(o.me.address)}</span>
+              <span className="faint" style={{ fontSize: 11 }}>{walletName}</span>
+            </span>
+            <button type="button" className="menu" aria-label="Disconnect" title="Disconnect" onClick={o.signOut}>
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 4H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M12.5 13.5L16 10l-3.5-3.5M16 10H8" /></svg>
+            </button>
           </div>
         </nav>
         <div className="content">
-          <div className="top"><div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>{title}</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div></div>
+          <div className="top"><div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>{title}</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div></div>
           {children}
         </div>
       </div>

@@ -55,7 +55,7 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
     }
   }, [loaded.data]);
 
-  if (!mine || !vault) return <Shell title="Agent"><div style={{ padding: 20 }} data-ready><p>Add this vault on the <Link to="/">start page</Link> first.</p></div></Shell>;
+  if (!mine || !vault) return <Shell title="Agent"><div style={{ padding: 20 }} data-ready><p>Add this vault on <Link to="/vaults">All vaults</Link> first.</p></div></Shell>;
   const d = loaded.data;
   const threshold = Number(d?.cfg.threshold ?? 1n);
   const isKeyAddress = (s: string) => {
@@ -141,7 +141,7 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
       {proposed && note && (
         <div className="note" role="status" style={{ margin: "16px 20px 0", borderColor: "#e0452b", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
           <span>{note}</span>
-          <span style={{ display: "flex", gap: 8 }}><Link to="/inbox" className="btn">Needs you</Link><Link to={`/v/${policy}/agents`} className="btn">Back to agents</Link></span>
+          <span style={{ display: "flex", gap: 8 }}><Link to="/" className="btn">Needs you</Link><Link to={`/v/${policy}/agents`} className="btn">Back to agents</Link></span>
         </div>
       )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, padding: "16px 20px", alignItems: "flex-start" }} {...(loaded.loading ? {} : { "data-ready": "" })}>
@@ -191,7 +191,7 @@ export function AgentEditor({ policy, unit }: { policy: string; unit?: string })
             <div style={{ padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
               {problems.map((p) => <ErrorNote key={p} error={p} />)}
               {busy && <div className="note"><Spinner label={busy} /></div>}
-              {note && !proposed && <div className="note">{note} <Link to="/inbox">Needs you</Link></div>}
+              {note && !proposed && <div className="note">{note} <Link to="/">Needs you</Link></div>}
               <ErrorNote error={err ?? loaded.error} />
             </div>
           </section>

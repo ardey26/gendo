@@ -6,7 +6,7 @@ import { decodeRecipe, encodeRecipe, recipeMatches, titleOf } from "../recipes.t
 import { DetailView, explainFor, prepare, useReview, type Prepared } from "../review.tsx";
 import { inFlight, needsConfirm, statusOf, type Status } from "../status.ts";
 import type { PendingView } from "../types.ts";
-import { ErrorNote, Shell, StatusIcon, short, useLoad, useOwner, usePoll } from "../ui.tsx";
+import { ErrorNote, Link, Shell, StatusIcon, short, useLoad, useOwner, usePoll } from "../ui.tsx";
 import { partialSign } from "../wallet.ts";
 import { explainTx } from "../../../../sdk/src/core/index.ts";
 import { inputsOf } from "../chain.ts";
@@ -20,6 +20,7 @@ export function Inbox() {
   const [busy, setBusy] = useState<string>();
   const [err, setErr] = useState<string>();
   const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
+  const suggested = useLoad(() => api.suggestedVaults(), [o.vaults]);
   const items = useLoad(async (): Promise<Item[]> => {
     // Creations are followed on the create page, not signed here.
     const rows = (await api.myPending()).filter((p) => p.kind !== "create");
@@ -103,8 +104,24 @@ export function Inbox() {
   );
   const d = cur?.view?.detail;
   return (
-    <Shell title={<><span style={{ fontWeight: 700, fontSize: 15 }}>Needs you</span><span className="faint">across {new Set(list.map((x) => x.p.policy)).size} vaults</span></>}>
+    <Shell title={<><span style={{ fontWeight: 700, fontSize: 15 }}>Needs you</span><span className="faint">across {new Set(list.map((x) => x.p.policy)).size === 1 ? "1 vault" : `${new Set(list.map((x) => x.p.policy)).size} vaults`}</span></>}>
       {review.panel}
+      {(!o.vaults.length || !!suggested.data?.length) && (
+        <div style={{ padding: "16px 20px 0", display: "flex", flexDirection: "column", gap: 10 }}>
+          {!o.vaults.length && !suggested.data?.length && (
+            <div className="note" style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
+              <span>No vaults yet. Create one, or add one another owner shared with you.</span>
+              <span style={{ display: "flex", gap: 8 }}><Link to="/new" className="btn pri">Create a vault</Link><Link to="/vaults" className="btn">Add a vault</Link></span>
+            </div>
+          )}
+          {!!suggested.data?.length && (
+            <div className="note" style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
+              <span>{suggested.data.length === 1 ? "A vault names you as an owner." : `${suggested.data.length} vaults name you as an owner.`} Add {suggested.data.length === 1 ? "it" : "them"} to see {suggested.data.length === 1 ? "it" : "them"} here.</span>
+              <Link to="/vaults" className="btn">Review</Link>
+            </div>
+          )}
+        </div>
+      )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, padding: "16px 20px", alignItems: "flex-start" }} {...(items.loading ? {} : { "data-ready": "" })}>
         <section className="panel" aria-label="Items" style={{ flex: "1 1 280px", maxWidth: 360 }}>
           <div className="ph"><span className="cap">Your signature</span></div>
@@ -129,11 +146,11 @@ export function Inbox() {
                   </div>
                   <div style={{ display: "flex", flexDirection: "column" }}>
                     <span>{cur.status.label}</span>
-                    <span className="faint" style={{ fontSize: 12 }}>
-                      {cur.p.requiredSigners
-                        .map((k) => `${k === o.me.pkh ? "You" : k === cur.p.createdBy && cur.p.kind === "request" ? "The agent" : `Owner key ${short(k)}`}: ${cur.p.signedBy.includes(k) ? "signed" : "not yet"}`)
-                        .join(" · ")}
-                    </span>
+                    {cur.p.requiredSigners.map((k) => (
+                      <span key={k} className="faint" style={{ fontSize: 12 }}>
+                        {`${k === o.me.pkh ? "You" : k === cur.p.createdBy && cur.p.kind === "request" ? "The agent" : `Owner key ${short(k)}`}: ${cur.p.signedBy.includes(k) ? "signed" : "not yet"}`}
+                      </span>
+                    ))}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>

@@ -15,7 +15,7 @@ describe("install options", () => {
   it("says which gendo an agent runs, and whether it needs an update", () => {
     expect(versionNote(undefined, { latest: "0.2.0", min: "0.1.1" })).toBeUndefined(); // not reported yet
     expect(versionNote("0.2.0", { latest: "0.2.0", min: "0.1.1" })).toEqual({ text: "gendo 0.2.0", tone: "ok" });
-    expect(versionNote("0.1.1", { latest: "0.2.0", min: "0.1.1" })).toEqual({ text: "gendo 0.1.1 · update available", tone: "update" });
-    expect(versionNote("0.1.0", { latest: "0.2.0", min: "0.1.1" })).toEqual({ text: "gendo 0.1.0 · update required to pay", tone: "required" });
+    expect(versionNote("0.1.1", { latest: "0.2.0", min: "0.1.1" })).toEqual({ text: "gendo 0.1.1, update available", tone: "update" });
+    expect(versionNote("0.1.0", { latest: "0.2.0", min: "0.1.1" })).toEqual({ text: "gendo 0.1.0, update required to pay", tone: "required" });
   });
 });

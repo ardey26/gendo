@@ -16,7 +16,7 @@ export const lmStudioLink = (code: string, origin: string) => `lmstudio://add_mc
 /** Which gendo an agent runs, as the owners' Agents tab shows it; undefined until the agent has reported. */
 export function versionNote(version: string | undefined, v: { latest: string; min: string }): { text: string; tone: "ok" | "update" | "required" } | undefined {
   if (!version) return undefined;
-  if (olderThan(version, v.min)) return { text: `gendo ${version} · update required to pay`, tone: "required" };
-  if (olderThan(version, v.latest)) return { text: `gendo ${version} · update available`, tone: "update" };
+  if (olderThan(version, v.min)) return { text: `gendo ${version}, update required to pay`, tone: "required" };
+  if (olderThan(version, v.latest)) return { text: `gendo ${version}, update available`, tone: "update" };
   return { text: `gendo ${version}`, tone: "ok" };
 }

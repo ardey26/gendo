@@ -161,3 +161,13 @@ describe("GET /me/suggested-vaults", () => {
     expect((await s.app.request("/me/suggested-vaults")).status).toBe(401);
   });
 });
+
+describe("your vaults' order", () => {
+  it("newest added first, and re-adding one doesn't move it", () => {
+    const db = store();
+    const pol = (c: string) => c.repeat(56);
+    for (const c of ["c", "a", "b"]) db.addUserVault("me", pol(c), `id-${c}`);
+    db.addUserVault("me", pol("c"), "id-c2");
+    expect(db.userVaults("me").map((v) => v.vaultId)).toEqual(["id-b", "id-a", "id-c2"]);
+  });
+});

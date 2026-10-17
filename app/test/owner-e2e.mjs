@@ -6,9 +6,9 @@ const ok = (m) => console.log(`  ok  ${m}`);
 const A = await browser(9341);
 const B = await browser(9342);
 const signIn = async (b, key) => {
-  await b.open(`${APP}/?testwallet=${key}`);
+  await b.open(`${APP}/vaults?testwallet=${key}`);
   await b.click(/Test wallet\s+Detected/);
-  await b.waitText(/Your agent wallets/);
+  await b.waitText(/All vaults/);
   await b.fill("vid", VAULT_ID);
   await b.click(/^Add vault$/);
   await b.waitText(/Unnamed vault|E2E payouts/);
@@ -41,7 +41,7 @@ try {
   await A.waitText(/Unpause proposed/);
   ok("owner A proposed the unpause, naming owner B");
 
-  await B.open(`${APP}/inbox`);
+  await B.open(`${APP}/`);
   await B.waitText(/Unpause/);
   await B.waitText(/Paused\s+yes\s+no/);
   await B.click(/^Sign with wallet$/);
@@ -64,7 +64,7 @@ try {
   await A.click(/^Sign with wallet$/);
   await A.waitText(/Proposed\. Signed by you: 1 of 2/);
   ok("owner A proposed a budget raise in the agent editor, after reviewing the diff computed in the browser");
-  await B.open(`${APP}/inbox`);
+  await B.open(`${APP}/`);
   await B.waitText(/Budget\s+25 ADA \/ day\s+40 ADA \/ day/);
   await B.click(/^Sign with wallet$/);
   await B.waitText(/Waiting for the chain|Landed/);
@@ -92,7 +92,7 @@ try {
   await A.waitText(/Team vault[\s\S]*Active[\s\S]*2 of 2 owners/, 180_000);
   ok("owner A created a 2-of-2 vault in the app, funded its treasury, reviewed and signed once; it landed and opened");
   // B sees it offered on the start page and adds it in one click: no id to paste.
-  await B.open(`${APP}/`);
+  await B.open(`${APP}/vaults`);
   await B.waitText(/Vaults that name you as an owner[\s\S]*Team vault/, 60_000);
   await B.click(/^Add$/); // the one suggestion; "Add vault" doesn't match
   await B.waitText(/Team vault[\s\S]*Active/);

@@ -90,7 +90,7 @@ describe("detailOf", () => {
 describe("review screens show everything in full", () => {
   it("payees, owners and agent keys are never shortened; a payment to another script is not the treasury", () => {
     const d = detailOf({ ...base, changes: [{ kind: "grant", unit: h(5) + "02", after: al(5_000_000n, 20_000_000n, 1), lovelace: 30_000_000n }] }, ctx);
-    expect(d.rows).toContainEqual({ k: "Agent key", now: "—", next: `${confirmWords(h(9))} · ${h(9)}`, changed: true });
+    expect(d.rows).toContainEqual({ k: "Agent key", now: "—", next: `${confirmWords(h(9))} (${h(9)})`, changed: true });
     expect(d.rows).toContainEqual({ k: "Payee added", now: "—", next: "addr_test1q0", changed: true });
     const other = detailOf({ ...base, changes: [], flows: [{ address: "addr_test1wsomeotherscript", delta: { lovelace: 5_000_000n } }] }, ctx);
     expect(other.title).not.toBe("Fund the treasury");

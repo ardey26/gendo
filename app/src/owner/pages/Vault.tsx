@@ -33,7 +33,7 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
   const waiting = !busy && inFlight(data.data?.pending ?? [], o.me.pkh);
   usePoll(data.refresh, waiting);
   if (!mine)
-    return <Shell title="Vault"><div style={{ padding: 20 }} data-ready><p>Add this vault on the <Link to="/">start page</Link> first (you need its vault id).</p></div></Shell>;
+    return <Shell title="Vault"><div style={{ padding: 20 }} data-ready><p>Add this vault on <Link to="/vaults">All vaults</Link> first (you need its vault id).</p></div></Shell>;
   const view = data.data?.view;
   const cfg = view?.config;
   const threshold = Number(cfg?.threshold ?? 1n);
@@ -133,7 +133,7 @@ export function VaultPage({ policy, tab }: { policy: string; tab: "agents" | "ac
                   <button type="button" className="btn pri" style={{ alignSelf: "flex-start" }} disabled={!!busy || signers.length !== threshold} onClick={() => void propose({ op: "unpause", signers }, "Unpause proposed.")}>Propose unpause</button>
                 </div>
               )}
-              {cfg.paused && openUnpause && <div className="row"><span>Unpause proposed: {openUnpause.signedBy.length} of {openUnpause.requiredSigners.length}</span><Link to="/inbox" className="btn">Open in Needs you</Link></div>}
+              {cfg.paused && openUnpause && <div className="row"><span>Unpause proposed: {openUnpause.signedBy.length} of {openUnpause.requiredSigners.length}</span><Link to="/" className="btn">Open in Needs you</Link></div>}
             </section>
             <OwnersCard owners={cfg.owners} threshold={threshold} me={o.me.pkh} busy={!!busy} onPropose={(owners, t, s) => void propose({ op: "config", owners, threshold: BigInt(t), signers: s }, "Owner change proposed.")} />
             <Listing policy={policy} name={mine.name ?? ""} listed={mine.listed} onSaved={() => void o.reloadVaults()} />

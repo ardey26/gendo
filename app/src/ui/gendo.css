@@ -40,10 +40,10 @@ a{color:#efe7d8}a:hover{color:#e0452b}
 .wallet:hover{border-color:#8f8578}
 .wico{display:inline-flex;width:24px;height:24px;border-radius:6px;border:1px dashed #3a332b;background:#1a1612;color:#8f8578;font-size:11px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0}
 .shell{display:flex;flex-wrap:wrap;min-height:100vh}
-.side{flex:1 1 232px;border-right:1px solid #2a241e;background:#0f0d0a;padding:12px 10px;display:flex;flex-direction:column;gap:2px;box-sizing:border-box}
+.side{flex:0 0 240px;border-right:1px solid #2a241e;background:#0f0d0a;padding:12px 10px;display:flex;flex-direction:column;gap:2px;box-sizing:border-box}
 .content{flex:999 1 560px;min-width:0;display:flex;flex-direction:column}
 /* Side by side, the app fills the screen: the sidebar stays put (its account footer always visible) and the content scrolls. */
-@media (min-width:800px){.frame{height:100vh;height:100dvh;display:flex;flex-direction:column}.frame .shell{flex:1;min-height:0;flex-wrap:nowrap}.frame .side{overflow-y:auto}.frame .content{overflow-y:auto}}
+@media (min-width:800px){.mbar,.side .close,.scrim{display:none!important}.frame{height:100vh;height:100dvh;display:flex;flex-direction:column}.frame .shell{flex:1;min-height:0;flex-wrap:nowrap}.frame .side{overflow-y:auto}.frame .content{overflow-y:auto}}
 .nav{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;color:#b9afa0;text-decoration:none;font-size:13px;background:transparent;border:0;font-family:inherit;cursor:pointer;text-align:left;width:100%;box-sizing:border-box}
 .nav:hover{background:#15120f;color:#efe7d8}
 .nav.on{background:#1a1612;color:#efe7d8}
@@ -93,3 +93,26 @@ input{font-family:inherit;font-variant-numeric:tabular-nums;font-size:13px;backg
 /* Selects: the native arrow sits flush against the edge; draw our own with room on the right. */
 select{appearance:none;-webkit-appearance:none;padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23b9afa0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5l3 3 3-3'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:12px 12px;cursor:pointer}
 select:hover{border-color:#8f8578}
+/* Sidebar. On a phone it's a drawer behind the menu button; side by side it's always there. */
+.brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;font-weight:900;font-size:15px;color:#efe7d8}
+.brandrow{display:flex;align-items:center;justify-content:space-between;padding:4px 4px 12px 10px}
+.menu{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:36px;min-height:36px;padding:0 6px;border-radius:6px;border:0;background:transparent;color:#b9afa0;cursor:pointer;font-family:inherit}
+.menu:hover{background:#15120f;color:#efe7d8}
+.menu .count{margin-left:0}
+.vname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.subnav{display:flex;flex-direction:column;gap:2px;margin:2px 0 6px 10px;padding-left:8px;border-left:1px solid #2a241e}
+.nav.cur{color:#efe7d8;font-weight:700}
+.nav.more{color:#8f8578}
+.nav.more:hover{color:#efe7d8}
+.nav.more .faint{margin-left:auto;font-size:12px}
+.who{display:flex;align-items:center;gap:10px;margin-top:8px;padding:10px 6px 4px 10px;border-top:1px solid #2a241e}
+.who img,.who .wico{width:28px;height:28px;border-radius:6px;flex-shrink:0}
+.mbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px 8px 16px;border-bottom:1px solid #2a241e;background:#0f0d0a;position:sticky;top:0;z-index:20}
+@media (max-width:799px){
+  .side{position:fixed;top:0;bottom:0;left:0;width:min(280px,85vw);z-index:40;border-right:1px solid #2a241e;overflow-y:auto;transform:translateX(-100%);transition:transform .2s ease,visibility 0s linear .2s;visibility:hidden}
+  .side.open{transform:none;visibility:visible;transition:transform .2s ease}
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:30}
+  .shell{min-height:0}
+  .top{padding:10px 16px}
+}
+@media (prefers-reduced-motion: reduce){.side{transition:none}}

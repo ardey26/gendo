@@ -20,7 +20,7 @@ export default function OwnerApp({ route, network }: { route: Route; network: Ne
   const [fatal, setFatal] = useState<string>();
   const [me, setMe] = useState<Connected>();
   const [vaults, setVaults] = useState<MyVault[]>([]);
-  const [inboxCount, setInboxCount] = useState(0);
+  const [needYou, setNeedYou] = useState<Record<string, number>>({});
   const [down, setDown] = useState(false);
 
   useEffect(() => {
@@ -66,7 +66,9 @@ export default function OwnerApp({ route, network }: { route: Route; network: Ne
   const reloadInbox = useCallback(async () => {
     try {
       const rows = await api.myPending();
-      setInboxCount(rows.filter((p) => p.status === "open" && p.requiredSigners.includes(me?.pkh ?? "") && !p.signedBy.includes(me?.pkh ?? "")).length);
+      const counts: Record<string, number> = {};
+      for (const p of rows) if (p.status === "open" && p.requiredSigners.includes(me?.pkh ?? "") && !p.signedBy.includes(me?.pkh ?? "")) counts[p.policy] = (counts[p.policy] ?? 0) + 1;
+      setNeedYou(counts);
     } catch {
       // the banner covers a down server
     }
@@ -83,7 +85,7 @@ export default function OwnerApp({ route, network }: { route: Route; network: Ne
   if (!lucid) return <div className="app"><Netband /><div className="boot"><Spinner label="Connecting to the chain…" /></div></div>;
   if (!me) return <Connect onConnected={setMe} />;
   const ctx: Owner = {
-    net: network, lucid, me, vaults, reloadVaults, inboxCount, reloadInbox,
+    net: network, lucid, me, vaults, reloadVaults, needYou, inboxCount: Object.values(needYou).reduce((a, b) => a + b, 0), reloadInbox,
     signOut: () => {
       session.clear();
       setMe(undefined);
@@ -97,8 +99,8 @@ export default function OwnerApp({ route, network }: { route: Route; network: Ne
           <button type="button" className="btn" onClick={() => void reloadVaults()}>Retry</button>
         </div>
       )}
-      {route.page === "start" && <Start />}
       {route.page === "inbox" && <Inbox />}
+      {route.page === "vaults" && <Start />}
       {route.page === "create" && <Create />}
       {route.page === "connect" && <ConnectAgent policy={route.policy} />}
       {route.page === "vault" && <VaultPage policy={route.policy} tab={route.tab} />}
